@@ -11,3 +11,5 @@ out/
 *.iws
 idea-flex.skeleton
 jflex-*.jar
+
+!gradle/wrapper/gradle-wrapper.properties
