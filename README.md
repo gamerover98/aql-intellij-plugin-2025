@@ -6,22 +6,18 @@
 
 ## Build
 
-```
-gradle build
+* On Unix: ```gradlew build -Dhttps.protocols=TLSv1,TLSv1.1,TLSv1.2```
+* On Windows (CMD): ```.\gradlew.bat build -Dhttps.protocols=TLSv1,TLSv1.1,TLSv1.2```
+* **Intellij run config**: ```Build```
 
-```
 Note: 
-build might take a while because it downloads Intellij Community Edition (300+MB, not sure exactly)
-
+build might take a while because it downloads Intellij Community Edition (300+MB, not sure exactly).
 
 ## Run
 
-```
-gradle runIde
-
-```
-
-
+* On Unix: ```gradlew runIde -Dhttps.protocols=TLSv1,TLSv1.1,TLSv1.2```
+* On Windows (CMD): ```.\gradlew.bat runIde -Dhttps.protocols=TLSv1,TLSv1.1,TLSv1.2```
+* **Intellij run config**: ```Run IDE```
 
 ## Find usages
  
