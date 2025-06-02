@@ -18,8 +18,8 @@ public class AqlChooseByNameContributor implements ChooseByNameContributor {
     public static final NavigationItem[] EMPTY_NAV_ITEMS = new NavigationItem[0];
 
     @NotNull
-    @Override
-    public String @NotNull [] getNames(final Project project, final boolean includeNonProjectItems) {
+    @Override //TODO: fixme (@NotNull annotation)
+    public String /*@NotNull*/ [] getNames(final Project project, final boolean includeNonProjectItems) {
         final List<AqlNamedElement> namedElements = AqlUtils.findNamedElements(project);
         final List<String> names = new ArrayList<>(namedElements.size());
         for (final AqlNamedElement element : namedElements) {
@@ -32,8 +32,8 @@ public class AqlChooseByNameContributor implements ChooseByNameContributor {
     }
 
     @NotNull
-    @Override
-    public NavigationItem @NotNull [] getItemsByName(String name, String pattern, Project project, boolean includeNonProjectItems) {
+    @Override //TODO: fixme (@NotNull annotation)
+    public NavigationItem /*@NotNull*/ [] getItemsByName(String name, String pattern, Project project, boolean includeNonProjectItems) {
         // todo include non project items
         final List<AqlNamedElement> properties = AqlUtils.findNamedElements(project, name);
         return properties.toArray(EMPTY_NAV_ITEMS);

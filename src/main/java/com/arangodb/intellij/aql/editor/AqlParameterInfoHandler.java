@@ -17,7 +17,7 @@ import com.intellij.lang.parameterInfo.CreateParameterInfoContext;
 import com.intellij.lang.parameterInfo.ParameterInfoHandlerWithTabActionSupport;
 import com.intellij.lang.parameterInfo.ParameterInfoUIContext;
 import com.intellij.lang.parameterInfo.UpdateParameterInfoContext;
-import com.intellij.psi.JavaTokenType;
+//import com.intellij.psi.JavaTokenType;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.tree.IElementType;
@@ -145,8 +145,8 @@ public class AqlParameterInfoHandler implements ParameterInfoHandlerWithTabActio
     }
 
     @NotNull
-    @Override
-    public AqlParameterVariable @NotNull [] getActualParameters(@NotNull final AqlNamedFunctions o) {
+    @Override // TODO: fixme (@NotNull annotation)
+    public AqlParameterVariable /*@NotNull*/ [] getActualParameters(@NotNull final AqlNamedFunctions o) {
 
         final List<String> parameters = getParameters(o.getFunctionName());
         final List<AqlParameterVariable> variables = new ArrayList<>();
@@ -162,13 +162,15 @@ public class AqlParameterInfoHandler implements ParameterInfoHandlerWithTabActio
     @NotNull
     @Override
     public IElementType getActualParameterDelimiterType() {
-        return JavaTokenType.COMMA;
+        //return JavaTokenType.COMMA; TODO: fixme
+        return null;
     }
 
     @NotNull
     @Override
     public IElementType getActualParametersRBraceType() {
-        return JavaTokenType.RBRACE;
+        //return JavaTokenType.RBRACE; TODO: fixme
+        return null;
     }
 
     @NotNull

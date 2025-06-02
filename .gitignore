@@ -13,3 +13,6 @@ idea-flex.skeleton
 jflex-*.jar
 
 !gradle/wrapper/gradle-wrapper.properties
+
+# Test IDE ignore files
+.intellijPlatform/*

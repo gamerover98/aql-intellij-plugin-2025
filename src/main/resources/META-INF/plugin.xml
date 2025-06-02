@@ -1,13 +1,13 @@
 <idea-plugin>
-  <id>com.arangodb.intellij.aql</id>
-  <name>AQL (ArangoDB Query Language)</name>
+  <!--<id>com.arangodb.intellij.aql</id>-->
+  <!--<name>AQL (ArangoDB Query Language)</name>-->
   <!--
     note: version is managed by gradle plugin
   -->
-  <version>1.0</version>
-  <vendor email="marijan@apache.org" url="https://www.machak.com">machak</vendor>
+  <!--<version>1.0</version>-->
+  <!--<vendor email="marijan@apache.org" url="https://www.machak.com">machak</vendor>-->
 
-  <description><![CDATA[
+  <!--<description><![CDATA[
       <p>AQL <a href="https://www.arangodb.com/"> ArangoDB</a> Query Language support</p>
       <ul>
         <li>Syntax highlighting</li>
@@ -17,9 +17,9 @@
         <li>Go to usages</li>
         <li>Execute queries</li>
       </ul>
-    ]]></description>
+    ]]></description>-->
   <!--  TODO: release notes-->
-  <change-notes><![CDATA[
+  <!--<change-notes><![CDATA[
      <ul>
      <li><strong>1.0.8</strong></li>
      <li>add WINDOW keyword</li>
@@ -41,10 +41,10 @@
      <p>1.0.0 initial release (syntax highlighting, autocompletion, refactorings, spring data query language injection)</p>
 
     ]]>
-  </change-notes>
+  </change-notes>-->
 
   <!-- please see http://www.jetbrains.org/intellij/sdk/docs/basics/getting_started/build_number_ranges.html for description -->
-  <idea-version since-build="163"/>
+  <!--<idea-version since-build="163"/>-->
 
   <!-- please see http://www.jetbrains.org/intellij/sdk/docs/basics/getting_started/plugin_compatibility.html
        on how to target different products -->

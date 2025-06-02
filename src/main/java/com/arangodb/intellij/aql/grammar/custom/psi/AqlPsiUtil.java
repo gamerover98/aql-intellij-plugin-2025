@@ -5,7 +5,7 @@ import com.arangodb.intellij.aql.grammar.custom.psi.impl.AqlNamedFunctionMixin;
 import com.arangodb.intellij.aql.grammar.custom.psi.impl.AqlSystemPropertyMixin;
 import com.arangodb.intellij.aql.util.Icons;
 import com.intellij.navigation.ItemPresentation;
-import com.intellij.psi.impl.PsiImplUtil;
+//import com.intellij.psi.impl.PsiImplUtil;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
@@ -60,7 +60,7 @@ public final class AqlPsiUtil {
     }
 
     public static AqlNamedElement setName(final AqlNamedElement element, final String newName) {
-        PsiImplUtil.setName(element, newName);
+        //PsiImplUtil.setName(element, newName); TODO: fixme
         return element;
     }
 

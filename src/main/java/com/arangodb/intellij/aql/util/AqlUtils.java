@@ -26,8 +26,8 @@ import com.google.common.primitives.Ints;
 import com.intellij.codeInsight.actions.ReformatCodeProcessor;
 import com.intellij.ide.fileTemplates.FileTemplate;
 import com.intellij.ide.fileTemplates.FileTemplateManager;
-import com.intellij.ide.fileTemplates.JavaTemplateUtil;
-import com.intellij.ide.highlighter.JavaFileType;
+//import com.intellij.ide.fileTemplates.JavaTemplateUtil;
+//import com.intellij.ide.highlighter.JavaFileType;
 import com.intellij.json.JsonFileType;
 import com.intellij.openapi.application.WriteAction;
 import com.intellij.openapi.fileTypes.LanguageFileType;
@@ -68,7 +68,7 @@ public final class AqlUtils {
         Project project = directory.getProject();
 
         Properties properties = new Properties(FileTemplateManager.getInstance(project).getDefaultProperties());
-        JavaTemplateUtil.setPackageNameAttribute(properties, directory);
+        //JavaTemplateUtil.setPackageNameAttribute(properties, directory); TODO: fixme
         properties.setProperty(NAME_TEMPLATE_PROPERTY, name);
         properties.setProperty(LOW_CASE_NAME_TEMPLATE_PROPERTY, StringUtil.decapitalize(name));
         for (int i = 0; i < parameters.length; i += 2) {
@@ -84,7 +84,7 @@ public final class AqlUtils {
 
         return WriteAction.compute(() -> {
             final PsiFileFactory factory = PsiFileFactory.getInstance(project);
-            PsiFile file = factory.createFileFromText(fileName, JavaFileType.INSTANCE.getLanguage(), text);
+            PsiFile file = factory.createFileFromText(fileName, /*JavaFileType.INSTANCE.getLanguage(),*/ text); //TODO: fixme
 
             file = (PsiFile) directory.add(file);
 

@@ -11,7 +11,7 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.annotation.Nullable;
+//import javax.annotation.Nullable;
 import java.util.Collections;
 import java.util.List;
 
@@ -64,7 +64,7 @@ public final class JSON {
     }
 
 
-    @Nullable
+    //@Nullable TODO: fixme
     public static <T> T fromJson(final byte[] message, Class<T> clazz) {
         try {
             return JSON.readValue(message, clazz);
@@ -74,7 +74,7 @@ public final class JSON {
         return null;
     }
 
-    @Nullable
+    //@Nullable TODO: fixme
     public static <T> T fromJson(final String message, Class<T> clazz) {
 
         try {
