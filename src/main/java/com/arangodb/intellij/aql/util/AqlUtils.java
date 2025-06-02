@@ -28,7 +28,7 @@ import com.intellij.ide.fileTemplates.FileTemplate;
 import com.intellij.ide.fileTemplates.FileTemplateManager;
 //import com.intellij.ide.fileTemplates.JavaTemplateUtil;
 //import com.intellij.ide.highlighter.JavaFileType;
-import com.intellij.json.JsonFileType;
+//import com.intellij.json.JsonFileType;
 import com.intellij.openapi.application.WriteAction;
 import com.intellij.openapi.fileTypes.LanguageFileType;
 import com.intellij.openapi.project.Project;
@@ -127,7 +127,8 @@ public final class AqlUtils {
 
 
     public static PsiFile createDummyJsonFile(@NotNull CharSequence text, final Project project) {
-        return createDummyFile(JsonFileType.INSTANCE, text, project);
+        //return createDummyFile(JsonFileType.INSTANCE, text, project); //TODO: fixme
+        return null;
     }
 
     public static PsiFile createDummyAqlFile(@NotNull CharSequence text, final Project project) {

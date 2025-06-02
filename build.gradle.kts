@@ -18,7 +18,6 @@ repositories {
 }
 
 group = "com.arangodb"
-java.sourceCompatibility = JavaVersion.VERSION_17
 
 dependencies {
     intellijPlatform {

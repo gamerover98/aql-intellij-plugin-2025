@@ -4,19 +4,19 @@ import com.arangodb.intellij.aql.actions.ActionEventData;
 import com.arangodb.intellij.aql.ui.MessageView;
 import com.arangodb.intellij.aql.util.AqlUtils;
 import com.intellij.execution.impl.ConsoleViewImpl;
-import com.intellij.execution.ui.ConsoleView;
-import com.intellij.json.JsonFileType;
+//import com.intellij.execution.ui.ConsoleView;
+//import com.intellij.json.JsonFileType;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.Application;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.editor.Document;
-import com.intellij.openapi.fileTypes.FileType;
+//import com.intellij.openapi.fileTypes.FileType;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.codeStyle.CodeStyleManager;
-import com.intellij.ui.EditorTextField;
+//import com.intellij.ui.EditorTextField;
 
 import javax.swing.*;
 
