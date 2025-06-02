@@ -3,10 +3,10 @@
 plugins {
     java
     idea
-    id("org.jetbrains.intellij.platform") version "2.6.0"
-    //id("org.jetbrains.intellij.platform.migration") version "2.6.0"
-    id("org.jetbrains.grammarkit") version "2021.1.3"
-    //id("net.researchgate.release") version "2.8.1"
+    kotlin("jvm") version libs.versions.kotlinJvm apply true
+    id("org.jetbrains.intellij.platform") version libs.versions.intellijPlatform apply true
+    id("org.jetbrains.grammarkit") version libs.versions.jetbrainsGrammarkit apply true
+    //id("net.researchgate.release") version "2.8.1" <-- Should be updated to the latest version if used
 }
 
 repositories {
@@ -19,38 +19,60 @@ repositories {
 
 group = "com.arangodb"
 
-dependencies {
-    intellijPlatform {
-        intellijIdeaCommunity(findProperty("intellijIdeaCommunityVersion") as String)
+sourceSets.main {
+    java.srcDirs(
+        "src/main/java",
+        "src/main/kotlin"
+    )
+}
+
+kotlin {
+    jvmToolchain {
+        languageVersion.set(JavaLanguageVersion.of(21))
     }
 
-    testRuntimeOnly("junit:junit:4.13.2")
-    implementation("com.arangodb:arangodb-java-driver:6.14.0") {
+    jvmToolchain(21)
+}
+
+dependencies {
+    intellijPlatform {
+        intellijIdeaCommunity(property("intellijIdeaCommunityVersion"))
+    }
+
+    // Plugin dependencies
+    implementation(libs.jacksonCore)
+    implementation(libs.jacksonDatabind)
+    implementation(libs.arangoDriver) {
         exclude(group = "org.slf4j", module = "slf4j-api")
     }
-    implementation("com.fasterxml.jackson.core:jackson-core:2.13.0")
-    implementation("com.fasterxml.jackson.core:jackson-databind:2.13.0")
+
+    // Test dependencies
+    testRuntimeOnly(libs.junit)
 }
 
 intellijPlatform {
     pluginConfiguration {
-        id = findProperty("pluginId") as String
-        name = findProperty("pluginName") as String
-        version = findProperty("pluginVersion") as String
-        description = findProperty("pluginDescription") as String
+        id = property("pluginId")
+        name = property("pluginName")
+        version = property("pluginVersion")
+        description = property("pluginDescription")
 
         vendor {
-            name = findProperty("pluginVendorName") as String
-            email = findProperty("pluginVendorEmail") as String
-            url = findProperty("pluginVendorUrl") as String
+            name = property("pluginVendorName")
+            email = property("pluginVendorEmail")
+            url = property("pluginVendorUrl")
         }
 
-        changeNotes = findProperty("changeNotes") as String
+        changeNotes = property("changeNotes")
 
         ideaVersion {
-            sinceBuild = findProperty("sinceBuild") as String
+            sinceBuild = property("sinceBuild")
         }
     }
+}
+
+fun property(name: String): String {
+    return findProperty(name) as? String ?: error("Property '$name' is not set")
 }
 
 //configure<ReleaseExtension> {

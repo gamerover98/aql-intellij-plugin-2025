@@ -1,0 +1,15 @@
+[versions]
+kotlinJvm = "2.1.21"
+intellijPlatform = "2.6.0"
+jetbrainsGrammarkit = "2021.1.3" # <-- Must be updated to a recent version
+
+arangoDBDriver = "6.14.0"
+jacksonCore = "2.13.0"
+jacosonDatabind = "2.13.0"
+junit = "4.13.2" # <-- Update to version 5
+
+[libraries]
+arangoDriver = { group = "com.arangodb", name = "arangodb-java-driver", version.ref = "arangoDBDriver" }
+jacksonCore = { group = "com.fasterxml.jackson.core", name = "jackson-core", version.ref = "jacksonCore" }
+jacksonDatabind = { group = "com.fasterxml.jackson.core", name = "jackson-databind", version.ref = "jacosonDatabind" }
+junit = { group = "junit", name = "junit", version.ref = "junit" }
