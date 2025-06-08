@@ -6,8 +6,24 @@
     <resource-bundle>messages.ArangoBundle</resource-bundle>
 
     <extensions defaultExtensionNs="com.intellij">
-        <toolWindow factoryClass="com.arangodb.intellij.aql.toolWindow.ArangoToolWindowFactory" id="ArangoToolWindow"/>
         <postStartupActivity implementation="com.arangodb.intellij.aql.startup.ArangoProjectActivity"/>
+
+        <!-- A tool window provide custom dockable panels in the IDE, allowing users to
+             interact with plugin features such as database management, consoles, or
+             custom UIs directly within the IntelliJ interface. -->
+        <!-- TODO: Add/Edit here the reworked tool window for ArangoDB management and console -->
+        <toolWindow id="ArangoToolWindow"
+                    factoryClass="com.arangodb.intellij.aql.toolWindow.ArangoToolWindowFactory"/>
+
+        <!-- Legacy tool windows for ArangoDB management and console -->
+        <toolWindow id="ArangoDB"
+                    anchor="right"
+                    secondary="false"
+                    factoryClass="com.arangodb.intellij.aql.ui.ServerWindowFactory"
+                    icon="/icons/toolbarArangoDB.png"/>
+        <toolWindow id="ArangoDB Console" anchor="bottom" secondary="false"
+                    factoryClass="com.arangodb.intellij.aql.ui.ConsoleWindowFactory"
+                    icon="/icons/toolbarArangoDB.png"/>
 
         <!--
           //############################################
@@ -45,8 +61,6 @@
         //############################################
       -->
       <projectService serviceInterface="com.arangodb.intellij.aql.db.AqlDatabaseService" serviceImplementation="com.arangodb.intellij.aql.db.AqlDatabaseServiceImpl"/>
-      <toolWindow id="ArangoDB" anchor="right" secondary="false" factoryClass="com.arangodb.intellij.aql.ui.ServerWindowFactory" icon="/icons/toolbarArangoDB.png"/>
-      <toolWindow id="ArangoDB Console" anchor="bottom" secondary="false" factoryClass="com.arangodb.intellij.aql.ui.ConsoleWindowFactory" icon="/icons/toolbarArangoDB.png"/>
       <intentionAction>
         <category>AQL</category>
         <className>com.arangodb.intellij.aql.intentions.AqlCreateConnectionIntention</className>
