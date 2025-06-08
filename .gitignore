@@ -17,3 +17,4 @@ jflex-*.jar
 
 # Test IDE ignore files
 .intellijPlatform/*
+.kotlin/sessions/**
