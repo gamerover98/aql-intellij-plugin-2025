@@ -37,10 +37,10 @@ public class AqlServerToolWindow implements Disposable {
         toolbarDecorator.setPanelBorder(BorderFactory.createEmptyBorder());
         toolbarDecorator.setToolbarPosition(ActionToolbarPosition.TOP);
         toolbarDecorator.addExtraAction(new AddServerAction(project));
-        toolbarDecorator.addExtraAction(new RefreshSchemeAction(this));
+        toolbarDecorator.addExtraAction(new RefreshSchemeAction(project));
         toolbarDecorator.addExtraAction(new ExpandAllAction(schemaTree));
         toolbarDecorator.addExtraAction(new CollapseAllAction(schemaTree));
-        toolbarDecorator.addExtraAction(new SetActiveAction(this));
+        toolbarDecorator.addExtraAction(new SetActiveAction(project));
         schemePanel.add(toolbarDecorator.createPanel());
 
         //schemePanel.add(toolbarDecorator.createPanel());
