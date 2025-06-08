@@ -1,149 +1,104 @@
 <idea-plugin>
-  <!--<id>com.arangodb.intellij.aql</id>-->
-  <!--<name>AQL (ArangoDB Query Language)</name>-->
-  <!--
-    note: version is managed by gradle plugin
-  -->
-  <!--<version>1.0</version>-->
-  <!--<vendor email="marijan@apache.org" url="https://www.machak.com">machak</vendor>-->
+    <depends>com.intellij.modules.lang</depends>
+    <depends optional="true" config-file="aql-language.xml">org.intellij.intelliLang</depends>
+    <depends>com.intellij.modules.java</depends>
 
-  <!--<description><![CDATA[
-      <p>AQL <a href="https://www.arangodb.com/"> ArangoDB</a> Query Language support</p>
-      <ul>
-        <li>Syntax highlighting</li>
-        <li>Find usages</li>
-        <li>Refactorings</li>
-        <li>Quick docs</li>
-        <li>Go to usages</li>
-        <li>Execute queries</li>
-      </ul>
-    ]]></description>-->
-  <!--  TODO: release notes-->
-  <!--<change-notes><![CDATA[
-     <ul>
-     <li><strong>1.0.8</strong></li>
-     <li>add WINDOW keyword</li>
-     <li>add remaining v3.7 and v3.8 functions:</li>
-     <li>IPV4_FROM_NUMBER, REPLACE_NTH, NGRAM_MATCH, NGRAM_SIMILARITY</li>
-     <li>NGRAM_POSITIONAL_SIMILARITY, DATE_UTCTOLOCAL, DATE_LOCALTOUTC</li>
-     <li>BIT_AND, BIT_OR, BIT_XOR,BIT_NEGATE, BIT_TEST, BIT_POPCOUNT, BIT_SHIFT_LEFT</li>
-     <li>BIT_SHIFT_RIGHT, BIT_CONSTRUCT, BIT_DECONSTRUCT, BIT_TO_STRING, BIT_FROM_STRING</li>
-     <li>GEO_IN_RANGE, DATE_TIMEZONE, DATE_TIMEZONES</li>
-     <li>fix syntax highlighting (+ function type "relaxing")</li>
-     <ul>
-     <p>1.0.7  SSL connection support, 3.8.x database support, bugfixes</p>
-     <p>1.0.6  </p>
-     <p>1.0.5 bug fixes, add new analyzers, keywords and functions(grammar/autocompletee), add function parameter hints (CTRL+P), add live template support</p>
-     <p>1.0.4 Add 2019.2+ support, use password manager to store passwords</p>
-     <p>1.0.3 bug fixes, create SpringData Repository interface intention</p>
-     <p>1.0.2 bug fixes</p>
-     <p>1.0.1 bug fixes (syntax highlighting, documentation)</p>
-     <p>1.0.0 initial release (syntax highlighting, autocompletion, refactorings, spring data query language injection)</p>
+    <resource-bundle>messages.ArangoBundle</resource-bundle>
 
-    ]]>
-  </change-notes>-->
+    <extensions defaultExtensionNs="com.intellij">
+        <toolWindow factoryClass="com.arangodb.intellij.aql.toolWindow.ArangoToolWindowFactory" id="ArangoToolWindow"/>
+        <postStartupActivity implementation="com.arangodb.intellij.aql.startup.ArangoProjectActivity"/>
 
-  <!-- please see http://www.jetbrains.org/intellij/sdk/docs/basics/getting_started/build_number_ranges.html for description -->
-  <!--<idea-version since-build="163"/>-->
+        <!--
+          //############################################
+          // Language setup
+          //############################################
+        -->
+      <codeInsight.parameterNameHints language="AQL" implementationClass="com.arangodb.intellij.aql.editor.AqlParameterNameHints"/>
+      <codeInsight.parameterInfo implementationClass="com.arangodb.intellij.aql.editor.AqlParameterInfoHandler" language="AQL"/>
+      <fileType name="AQL file" implementationClass="com.arangodb.intellij.aql.file.AqlFileType" fieldName="INSTANCE" language="AQL" extensions="aql"/>
+      <defaultLiveTemplatesProvider implementation="com.arangodb.intellij.aql.templates.AqlTemplateProvider" />
+      <liveTemplateContext implementation="com.arangodb.intellij.aql.templates.AqlTemplateContext"/>
+      <lang.parserDefinition language="AQL" implementationClass="com.arangodb.intellij.aql.lang.AqlParserDefinition"/>
+      <internalFileTemplate name="AQL Template.aql"/>
+      <colorSettingsPage implementation="com.arangodb.intellij.aql.settings.AqlColorSettingsPage"/>
+      <additionalTextAttributes scheme="Default" file="colors/AQLDefault.xml"/>
+      <psi.referenceContributor implementation="com.arangodb.intellij.aql.lang.AqlPsiReferenceContributor"/>
+      <gotoSymbolContributor implementation="com.arangodb.intellij.aql.lang.AqlChooseByNameContributor"/>
+      <lang.psiStructureViewFactory language="AQL" implementationClass="com.arangodb.intellij.aql.lang.AqlPsiStructureViewFactory"/>
+      <lang.findUsagesProvider language="AQL" implementationClass="com.arangodb.intellij.aql.lang.AqlFindUsagesProvider"/>
+      <lang.documentationProvider language="AQL" implementationClass="com.arangodb.intellij.aql.lang.AqlDocumentationProvider"/>
+      <lang.syntaxHighlighterFactory language="AQL" implementationClass="com.arangodb.intellij.aql.syntax.AqlSyntaxHighlighterFactory"/>
+      <lang.ast.factory language="AQL" implementationClass="com.arangodb.intellij.aql.lang.psi.AqlASTFactory"/>
+      <!--
+      <codeStyleSettingsProvider implementation="com.simpleplugin.SimpleCodeStyleSettingsProvider"/>
+      <langCodeStyleSettingsProvider implementation="com.simpleplugin.SimpleLanguageCodeStyleSettingsProvider"/>
+      -->
+      <codeStyleSettingsProvider implementation="com.arangodb.intellij.aql.syntax.AqlCodeStyleSettingsProvider"/>
+      <langCodeStyleSettingsProvider implementation="com.arangodb.intellij.aql.syntax.AqlLanguageCodeStyleSettingsProvider"/>
+      <annotator language="AQL" implementationClass="com.arangodb.intellij.aql.syntax.AqlSyntaxHighlighterAnnotator"/>
+      <lang.commenter language="AQL" implementationClass="com.arangodb.intellij.aql.syntax.AqlCommenter"/>
+      <completion.contributor language="AQL" implementationClass="com.arangodb.intellij.aql.editor.AqlCodeCompletionContributor"/>
+      <!--
+        //############################################
+        // Services
+        //############################################
+      -->
+      <projectService serviceInterface="com.arangodb.intellij.aql.db.AqlDatabaseService" serviceImplementation="com.arangodb.intellij.aql.db.AqlDatabaseServiceImpl"/>
+      <toolWindow id="ArangoDB" anchor="right" secondary="false" factoryClass="com.arangodb.intellij.aql.ui.ServerWindowFactory" icon="/icons/toolbarArangoDB.png"/>
+      <toolWindow id="ArangoDB Console" anchor="bottom" secondary="false" factoryClass="com.arangodb.intellij.aql.ui.ConsoleWindowFactory" icon="/icons/toolbarArangoDB.png"/>
+      <intentionAction>
+        <category>AQL</category>
+        <className>com.arangodb.intellij.aql.intentions.AqlCreateConnectionIntention</className>
+      </intentionAction>
+      <intentionAction>
+        <category>AQL</category>
+          <!--<bundleName>com.arangodb.intellij.aql.intentions.AqlIntentionsBundle</bundleName>
+          <categoryKey>intention.aql.create.repository</categoryKey>-->
+        <className>com.arangodb.intellij.aql.intentions.AqlCreateRepositoryIntention</className>
+      </intentionAction>
+    </extensions>
 
-  <!-- please see http://www.jetbrains.org/intellij/sdk/docs/basics/getting_started/plugin_compatibility.html
-       on how to target different products -->
-  <!-- uncomment to enable plugin in all products  -->
-  <depends>com.intellij.modules.lang</depends>
+    <actions>
+        <action id="com.arangodb.intellij.aql.actions.AqlExecuteQueryAction"
+                class="com.arangodb.intellij.aql.actions.AqlExecuteQueryAction" text="Execute AQL Query"
+                icon="/icons/run.svg" description="Execute AQL Query">
+            <add-to-group group-id="EditorPopupMenu.Run" anchor="first"/>
+        </action>
+        <action id="com.arangodb.intellij.aql.actions.AqlExplainQueryAction"
+                class="com.arangodb.intellij.aql.actions.AqlExplainQueryAction" text="Explain AQL Query"
+                icon="/icons/explain.svg" description="Explain AQL Query">
+            <add-to-group group-id="EditorPopupMenu.Run" anchor="first"/>
+        </action>
+        <action id="aql.NewAqlFile" class="com.arangodb.intellij.aql.file.AqlFileTemplateAction"
+                text="AQL File" description="Create new AQL file">
+            <add-to-group group-id="NewGroup" anchor="before" relative-to-action="NewFile"/>
+        </action>
 
+        <group id="AQL.Action.Console" text="AQL Console">
+            <action id="AQL.Action.Console.ExecuteQuery"
+                    class="com.arangodb.intellij.aql.actions.AqlExecuteQueryAction"
+                    text="Execute AQL query"
+                    icon="/icons/run.svg"
+                    description="Execute AQL query">
+            </action>
+            <action id="AQL.Action.Console.Clean"
+                    class="com.arangodb.intellij.aql.actions.AqlEmptyLogAction"
+                    text="Clear Query Console"
+                    icon="/icons/trash.svg"
+                    description="Clear">
+            </action>
+        </group>
+    </actions>
 
-  <depends optional="true" config-file="aql-language.xml">org.intellij.intelliLang</depends>
-  <depends>com.intellij.modules.java</depends>
-
-  <extensions defaultExtensionNs="com.intellij">
-    <!--
-      //############################################
-      // Language setup
-      //############################################
-    -->
-
-    <codeInsight.parameterNameHints language="AQL" implementationClass="com.arangodb.intellij.aql.editor.AqlParameterNameHints"/>
-    <codeInsight.parameterInfo implementationClass="com.arangodb.intellij.aql.editor.AqlParameterInfoHandler" language="AQL"/>
-    <fileType name="AQL file" implementationClass="com.arangodb.intellij.aql.file.AqlFileType" fieldName="INSTANCE" language="AQL" extensions="aql"/>
-    <defaultLiveTemplatesProvider implementation="com.arangodb.intellij.aql.templates.AqlTemplateProvider" />
-    <liveTemplateContext implementation="com.arangodb.intellij.aql.templates.AqlTemplateContext"/>
-    <lang.parserDefinition language="AQL" implementationClass="com.arangodb.intellij.aql.lang.AqlParserDefinition"/>
-    <internalFileTemplate name="AQL Template.aql"/>
-    <colorSettingsPage implementation="com.arangodb.intellij.aql.settings.AqlColorSettingsPage"/>
-    <additionalTextAttributes scheme="Default" file="colors/AQLDefault.xml"/>
-    <psi.referenceContributor implementation="com.arangodb.intellij.aql.lang.AqlPsiReferenceContributor"/>
-    <gotoSymbolContributor implementation="com.arangodb.intellij.aql.lang.AqlChooseByNameContributor"/>
-    <lang.psiStructureViewFactory language="AQL" implementationClass="com.arangodb.intellij.aql.lang.AqlPsiStructureViewFactory"/>
-    <lang.findUsagesProvider language="AQL" implementationClass="com.arangodb.intellij.aql.lang.AqlFindUsagesProvider"/>
-    <lang.documentationProvider language="AQL" implementationClass="com.arangodb.intellij.aql.lang.AqlDocumentationProvider"/>
-    <lang.syntaxHighlighterFactory language="AQL" implementationClass="com.arangodb.intellij.aql.syntax.AqlSyntaxHighlighterFactory"/>
-    <lang.ast.factory language="AQL" implementationClass="com.arangodb.intellij.aql.lang.psi.AqlASTFactory"/>
-    <!--
-    <codeStyleSettingsProvider implementation="com.simpleplugin.SimpleCodeStyleSettingsProvider"/>
-    <langCodeStyleSettingsProvider implementation="com.simpleplugin.SimpleLanguageCodeStyleSettingsProvider"/>
-    -->
-    <codeStyleSettingsProvider implementation="com.arangodb.intellij.aql.syntax.AqlCodeStyleSettingsProvider"/>
-    <langCodeStyleSettingsProvider implementation="com.arangodb.intellij.aql.syntax.AqlLanguageCodeStyleSettingsProvider"/>
-    <annotator language="AQL" implementationClass="com.arangodb.intellij.aql.syntax.AqlSyntaxHighlighterAnnotator"/>
-    <lang.commenter language="AQL" implementationClass="com.arangodb.intellij.aql.syntax.AqlCommenter"/>
-    <completion.contributor language="AQL" implementationClass="com.arangodb.intellij.aql.editor.AqlCodeCompletionContributor"/>
-    <!--
-      //############################################
-      // Services
-      //############################################
-    -->
-    <projectService serviceInterface="com.arangodb.intellij.aql.db.AqlDatabaseService" serviceImplementation="com.arangodb.intellij.aql.db.AqlDatabaseServiceImpl"/>
-    <toolWindow id="ArangoDB" anchor="right" secondary="false" factoryClass="com.arangodb.intellij.aql.ui.ServerWindowFactory" icon="/icons/toolbarArangoDB.png"/>
-    <toolWindow id="ArangoDB Console" anchor="bottom" secondary="false" factoryClass="com.arangodb.intellij.aql.ui.ConsoleWindowFactory" icon="/icons/toolbarArangoDB.png"/>
-    <intentionAction>
-      <category>AQL</category>
-      <className>com.arangodb.intellij.aql.intentions.AqlCreateConnectionIntention</className>
-    </intentionAction>
-    <intentionAction>
-      <category>AQL</category>
-<!--      <bundleName>com.arangodb.intellij.aql.intentions.AqlIntentionsBundle</bundleName>
-      <categoryKey>intention.aql.create.repository</categoryKey>-->
-      <className>com.arangodb.intellij.aql.intentions.AqlCreateRepositoryIntention</className>
-    </intentionAction>
-  </extensions>
-
-  <actions>
-    <action id="com.arangodb.intellij.aql.actions.AqlExecuteQueryAction" class="com.arangodb.intellij.aql.actions.AqlExecuteQueryAction" text="Execute AQL Query" icon="/icons/run.svg" description="Execute AQL Query">
-      <add-to-group group-id="EditorPopupMenu.Run" anchor="first"/>
-    </action>
-    <action id="com.arangodb.intellij.aql.actions.AqlExplainQueryAction" class="com.arangodb.intellij.aql.actions.AqlExplainQueryAction" text="Explain AQL Query" icon="/icons/explain.svg" description="Explain AQL Query">
-      <add-to-group group-id="EditorPopupMenu.Run" anchor="first"/>
-    </action>
-    <action id="aql.NewAqlFile" class="com.arangodb.intellij.aql.file.AqlFileTemplateAction"
-            text="AQL File" description="Create new AQL file">
-      <add-to-group group-id="NewGroup" anchor="before" relative-to-action="NewFile"/>
-    </action>
-
-    <group id="AQL.Action.Console" text="AQL Console">
-      <action id="AQL.Action.Console.ExecuteQuery"
-              class="com.arangodb.intellij.aql.actions.AqlExecuteQueryAction"
-              text="Execute AQL query"
-              icon="/icons/run.svg"
-              description="Execute AQL query">
-      </action>
-      <action id="AQL.Action.Console.Clean"
-              class="com.arangodb.intellij.aql.actions.AqlEmptyLogAction"
-              text="Clear Query Console"
-              icon="/icons/trash.svg"
-              description="Clear">
-      </action>
-    </group>
-  </actions>
-
-
-  <application-components>
-    <component>
-      <implementation-class>com.arangodb.intellij.aql.ui.DataWindowState</implementation-class>
-    </component>
-  </application-components>
-  <project-components>
-    <component>
-      <implementation-class>com.arangodb.intellij.aql.ui.DataWindowState</implementation-class>
-    </component>
-  </project-components>
+    <application-components>
+        <component>
+            <implementation-class>com.arangodb.intellij.aql.ui.DataWindowState</implementation-class>
+        </component>
+    </application-components>
+    <project-components>
+        <component>
+            <implementation-class>com.arangodb.intellij.aql.ui.DataWindowState</implementation-class>
+        </component>
+    </project-components>
 </idea-plugin>
