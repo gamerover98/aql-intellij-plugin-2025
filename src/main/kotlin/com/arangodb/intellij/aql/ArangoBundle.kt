@@ -4,6 +4,8 @@ import com.intellij.DynamicBundle
 import org.jetbrains.annotations.NonNls
 import org.jetbrains.annotations.PropertyKey
 
+import com.arangodb.intellij.aql.util.log
+
 /**
  * Provides access to localized messages for the ArangoDB plugin.
  *
@@ -45,4 +47,46 @@ object ArangoBundle : DynamicBundle(BUNDLE) {
         @PropertyKey(resourceBundle = BUNDLE) key: String,
         vararg params: Any
     ) = getLazyMessage(key, *params)
+
+    /**
+     * Notifies the user with an informational message.
+     *
+     * @param msg Message key in the resource file.
+     * @param params Optional parameters for message formatting.
+     */
+    @JvmStatic
+    fun notifyInfo(
+        @PropertyKey(resourceBundle = BUNDLE) msg: String,
+        vararg params: Any
+    ) = apply {
+        log.info(message(msg, *params)) //TODO: replace with a proper notification system.
+    }
+
+    /**
+     * Notifies the user with a warning message.
+     *
+     * @param msg Message key in the resource file.
+     * @param params Optional parameters for message formatting.
+     */
+    @JvmStatic
+    fun notifyWarning(
+        @PropertyKey(resourceBundle = BUNDLE) msg: String,
+        vararg params: Any
+    ) = apply {
+        log.warn(message(msg, *params)) //TODO: replace with a proper notification system.
+    }
+
+    /**
+     * Notifies the user with an error message.
+     *
+     * @param msg Message key in the resource file.
+     * @param params Optional parameters for message formatting.
+     */
+    @JvmStatic
+    fun notifyError(
+        @PropertyKey(resourceBundle = BUNDLE) msg: String,
+        vararg params: Any
+    ) = apply {
+        log.error(message(msg, *params)) //TODO: replace with a proper notification system.
+    }
 }

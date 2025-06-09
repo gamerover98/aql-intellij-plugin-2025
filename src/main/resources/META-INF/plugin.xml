@@ -13,15 +13,15 @@
              custom UIs directly within the IntelliJ interface. -->
         <!-- TODO: Add/Edit here the reworked tool window for ArangoDB management and console -->
         <toolWindow id="ArangoToolWindow"
-                    factoryClass="com.arangodb.intellij.aql.toolWindow.ArangoToolWindowFactory"/>
-
-        <!-- Legacy tool windows for ArangoDB management and console -->
-        <toolWindow id="ArangoDB"
                     anchor="right"
                     secondary="false"
-                    factoryClass="com.arangodb.intellij.aql.ui.ServerWindowFactory"
+                    factoryClass="com.arangodb.intellij.aql.toolWindow.ServerToolWindowFactory"
                     icon="/icons/toolbarArangoDB.png"/>
-        <toolWindow id="ArangoDB Console" anchor="bottom" secondary="false"
+
+        <!-- Legacy tool windows for ArangoDB management and console -->
+        <toolWindow id="ArangoDB Console"
+                    anchor="bottom"
+                    secondary="false"
                     factoryClass="com.arangodb.intellij.aql.ui.ConsoleWindowFactory"
                     icon="/icons/toolbarArangoDB.png"/>
 
