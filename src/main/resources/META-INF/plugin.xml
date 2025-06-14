@@ -93,9 +93,12 @@
                 icon="/icons/explain.svg" description="Explain AQL Query">
             <add-to-group group-id="EditorPopupMenu.Run" anchor="first"/>
         </action>
-        <action id="aql.NewAqlFile" class="com.arangodb.intellij.aql.file.AqlFileTemplateAction"
-                text="AQL File" description="Create new AQL file">
-            <add-to-group group-id="NewGroup" anchor="before" relative-to-action="NewFile"/>
+
+        <action id="aql.NewAqlFile"
+                class="com.arangodb.intellij.aql.file.AqlFileTemplateAction">
+            <add-to-group group-id="NewGroup"
+                          anchor="before"
+                          relative-to-action="NewFile"/>
         </action>
 
         <group id="AQL.Action.Console" text="AQL Console">
