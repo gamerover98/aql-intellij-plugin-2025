@@ -1,6 +1,7 @@
 import org.jetbrains.changelog.Changelog
 import org.jetbrains.changelog.markdownToHTML
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     id("java") // Java support
@@ -150,13 +151,47 @@ kover {
     }
 }
 
+// Configure the GrammarKit IntelliJ Platform Plugin.
+//grammarKit {
+//    jflexRelease = "1.9.2" // JFlex is the lexical analyzer generator (also known as scanner generator) for Java.
+//    grammarKitRelease = "2023.3" // Grammar-Kit is a tool for generating parsers and lexers for IntelliJ plugins.
+//}
+
+val generateGrammars = tasks.register("generateGrammars") {
+    dependsOn("generateParser", "generateLexer")
+}
+
+tasks.withType<KotlinCompile> {
+    dependsOn(generateGrammars)
+}
+
 tasks {
+    sourceSets {
+        java.sourceSets["main"].java {
+            srcDir("src/main/gen")
+        }
+    }
+
     wrapper {
         gradleVersion = providers.gradleProperty("gradleVersion").get()
     }
 
     publishPlugin {
         dependsOn(patchChangelog)
+    }
+
+    generateLexer {
+        sourceFile.set(file("$projectDir/src/main/resources/grammars/AqlLexer.flex"))
+        targetOutputDir.set(file("$projectDir/src/main/gen/com/arangodb/intellij/aql/grammar/generated/"))
+        purgeOldFiles.set(true)
+    }
+
+    generateParser {
+        sourceFile.set(file("$projectDir/src/main/resources/grammars/aql.bnf"))
+        targetRootOutputDir.set(file("$projectDir/src/main/gen"))
+        pathToParser.set("/com/arangodb/intellij/aql/grammar/generated/AqlParser.java")
+        pathToPsiRoot.set("/com/arangodb/intellij/aql/grammar/custom/psi")
+        purgeOldFiles.set(true)
     }
 }
 
@@ -180,4 +215,3 @@ intellijPlatformTesting {
         }
     }
 }
-

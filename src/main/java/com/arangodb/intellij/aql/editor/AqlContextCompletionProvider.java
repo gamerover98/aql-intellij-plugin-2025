@@ -25,7 +25,8 @@ public class AqlContextCompletionProvider extends CompletionProvider<CompletionP
 
     @Override
     protected void addCompletions(@NotNull final CompletionParameters parameters,
-                                  @NotNull final ProcessingContext processingContext, @NotNull final CompletionResultSet completionResultSet) {
+                                  @NotNull final ProcessingContext processingContext,
+                                  @NotNull final CompletionResultSet completionResultSet) {
         final PsiElement position = parameters.getPosition();
         final PsiFile containingFile = position.getContainingFile();
         final PsiElement[] psiElements = PsiTreeUtil.collectElements(containingFile,
@@ -36,7 +37,7 @@ public class AqlContextCompletionProvider extends CompletionProvider<CompletionP
                             final AqlPropertyName property = (AqlPropertyName) e;
                             final Icon icon = fetchIcon(property);
                             return LookupElementBuilder
-                                    .create(property.getName())
+                                    .create(property.getText())
                                     .withCaseSensitivity(true)
                                     .withIcon(icon)
                                     .bold();

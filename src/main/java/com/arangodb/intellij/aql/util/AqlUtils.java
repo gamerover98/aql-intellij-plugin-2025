@@ -149,7 +149,7 @@ public final class AqlUtils {
         final Set<String> strings = new HashSet<>();
         for (PsiElement element : psiElements) {
             final AqlParameterVariable e = (AqlParameterVariable) element;
-            strings.add(e.getName());
+            strings.add(e.getText()); // get Name
         }
         return strings;
     }

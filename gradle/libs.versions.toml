@@ -12,7 +12,7 @@ intelliJPlatform = "2.6.0"
 kotlin = "2.1.21"
 kover = "0.9.1"
 qodana = "2024.3.4"
-grammarkit = "2021.1.3" # <-- Must be updated to a recent version
+grammarkit = "2022.3.2.2"
 
 [libraries]
 junit = { group = "junit", name = "junit", version.ref = "junit" }

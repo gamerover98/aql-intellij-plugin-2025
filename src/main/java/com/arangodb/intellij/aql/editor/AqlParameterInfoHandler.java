@@ -116,7 +116,7 @@ public class AqlParameterInfoHandler implements ParameterInfoHandlerWithTabActio
         if (o instanceof AqlNamedFunctions) {
             final AqlNamedFunctions p = (AqlNamedFunctions) o;
             // TODO implement parameter offsets etc.
-            final String functionName = p.getFunctionName();
+            final String functionName = p.getText(); // Function name
             final List<String> params = getParameters(functionName);
             boolean first = true;
             final StringBuilder builder = new StringBuilder(params.size() * 20);
@@ -148,7 +148,7 @@ public class AqlParameterInfoHandler implements ParameterInfoHandlerWithTabActio
     @Override // TODO: fixme (@NotNull annotation)
     public AqlParameterVariable /*@NotNull*/ [] getActualParameters(@NotNull final AqlNamedFunctions o) {
 
-        final List<String> parameters = getParameters(o.getFunctionName());
+        final List<String> parameters = getParameters(o.getText()); // Function name
         final List<AqlParameterVariable> variables = new ArrayList<>();
         // TODO upgrade check
        /* for (String parameter : parameters) {
@@ -205,6 +205,7 @@ public class AqlParameterInfoHandler implements ParameterInfoHandlerWithTabActio
     private List<String> getParameters(final String functionName) {
         if (functionName != null) {
             if (params == null) {
+                // TODO: Replace this with a more robust solution (really dude?)
                 try (final InputStream stream = getClass().getResourceAsStream("/AqlFunctionParameters.json")) {
                     if (stream == null) {
                         return Collections.emptyList();
