@@ -42,13 +42,31 @@
 
       <defaultLiveTemplatesProvider implementation="com.arangodb.intellij.aql.templates.AqlTemplateProvider" />
       <liveTemplateContext implementation="com.arangodb.intellij.aql.templates.AqlTemplateContext"/>
-      <lang.parserDefinition language="AQL" implementationClass="com.arangodb.intellij.aql.lang.AqlParserDefinition"/>
-      <internalFileTemplate name="AQL Template.aql"/>
+
+        <!-- Parser definition: https://plugins.jetbrains.com/docs/intellij/lexer-and-parser-definition.html#register-the-parser-definition -->
+        <lang.parserDefinition
+                language="AQL"
+                implementationClass="com.arangodb.intellij.aql.lang.AqlParserDefinition"/>
+
+        <!-- File templates: https://plugins.jetbrains.com/docs/intellij/using-file-templates.html#custom-create-file-from-template-actions -->
+        <internalFileTemplate name="AQL Template.aql"/> <!-- Simple empty AQL template file -->
+        <!-- TODO: Add spring-data-aql template file -->
+
       <colorSettingsPage implementation="com.arangodb.intellij.aql.settings.AqlColorSettingsPage"/>
       <additionalTextAttributes scheme="Default" file="colors/AQLDefault.xml"/>
-      <psi.referenceContributor implementation="com.arangodb.intellij.aql.lang.AqlPsiReferenceContributor"/>
-      <gotoSymbolContributor implementation="com.arangodb.intellij.aql.lang.AqlChooseByNameContributor"/>
-      <lang.psiStructureViewFactory language="AQL" implementationClass="com.arangodb.intellij.aql.lang.AqlPsiStructureViewFactory"/>
+
+        <!-- PSI References: https://plugins.jetbrains.com/docs/intellij/psi-references.html#contributed-references -->
+        <!-- NOTE: Please ignore the IDE warning because we want to use the reference contributor in all files. -->
+        <psi.referenceContributor implementation="com.arangodb.intellij.aql.lang.AqlPsiReferenceContributor"/>
+
+        <!-- Go to Symbol: https://www.jetbrains.com/help/rider/Navigation_and_Search__Go_to_Symbol.html -->
+        <gotoSymbolContributor implementation="com.arangodb.intellij.aql.lang.AqlChooseByNameContributor"/>
+
+        <!-- Structure View: https://plugins.jetbrains.com/docs/intellij/structure-view.html -->
+        <lang.psiStructureViewFactory
+                language="AQL"
+                implementationClass="com.arangodb.intellij.aql.lang.AqlPsiStructureViewFactory"/>
+
       <lang.findUsagesProvider language="AQL" implementationClass="com.arangodb.intellij.aql.lang.AqlFindUsagesProvider"/>
       <lang.documentationProvider language="AQL" implementationClass="com.arangodb.intellij.aql.lang.AqlDocumentationProvider"/>
       <lang.syntaxHighlighterFactory language="AQL" implementationClass="com.arangodb.intellij.aql.syntax.AqlSyntaxHighlighterFactory"/>
