@@ -14,8 +14,8 @@ import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 
 import com.arangodb.entity.AqlExecutionExplainEntity;
-import com.arangodb.intellij.aql.file.AqlFile;
-import com.arangodb.intellij.aql.file.AqlFileType;
+import com.arangodb.intellij.aql.fileTypes.AqlFile;
+import com.arangodb.intellij.aql.fileTypes.AqlFileType;
 import com.arangodb.intellij.aql.grammar.custom.psi.AqlNamedElement;
 import com.arangodb.intellij.aql.grammar.generated.psi.AqlParameterVariable;
 import com.arangodb.intellij.aql.model.AqlQuery;

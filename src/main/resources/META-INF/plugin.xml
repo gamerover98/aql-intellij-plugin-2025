@@ -19,20 +19,27 @@
                     icon="/icons/toolbarArangoDB.png"/>
 
         <!-- Legacy tool windows for ArangoDB management and console -->
-        <toolWindow id="ArangoDB Console"
+        <!--<toolWindow id="ArangoDB Console"
                     anchor="bottom"
                     secondary="false"
                     factoryClass="com.arangodb.intellij.aql.ui.ConsoleWindowFactory"
-                    icon="/icons/toolbarArangoDB.png"/>
+                    icon="/icons/toolbarArangoDB.png"/>-->
 
         <!--
           //############################################
           // Language setup
           //############################################
         -->
-      <codeInsight.parameterNameHints language="AQL" implementationClass="com.arangodb.intellij.aql.editor.AqlParameterNameHints"/>
-      <codeInsight.parameterInfo implementationClass="com.arangodb.intellij.aql.editor.AqlParameterInfoHandler" language="AQL"/>
-      <fileType name="AQL file" implementationClass="com.arangodb.intellij.aql.file.AqlFileType" fieldName="INSTANCE" language="AQL" extensions="aql"/>
+        <codeInsight.parameterNameHints language="AQL"
+                                        implementationClass="com.arangodb.intellij.aql.editor.AqlParameterNameHints"/>
+        <codeInsight.parameterInfo language="AQL"
+                                   implementationClass="com.arangodb.intellij.aql.editor.AqlParameterInfoHandler"/>
+        <fileType name="AQL file"
+                  implementationClass="com.arangodb.intellij.aql.fileTypes.AqlFileType"
+                  fieldName="INSTANCE"
+                  language="AQL"
+                  extensions="aql"/>
+
       <defaultLiveTemplatesProvider implementation="com.arangodb.intellij.aql.templates.AqlTemplateProvider" />
       <liveTemplateContext implementation="com.arangodb.intellij.aql.templates.AqlTemplateContext"/>
       <lang.parserDefinition language="AQL" implementationClass="com.arangodb.intellij.aql.lang.AqlParserDefinition"/>
@@ -55,12 +62,14 @@
       <annotator language="AQL" implementationClass="com.arangodb.intellij.aql.syntax.AqlSyntaxHighlighterAnnotator"/>
       <lang.commenter language="AQL" implementationClass="com.arangodb.intellij.aql.syntax.AqlCommenter"/>
       <completion.contributor language="AQL" implementationClass="com.arangodb.intellij.aql.editor.AqlCodeCompletionContributor"/>
+
       <!--
         //############################################
         // Services
         //############################################
       -->
-      <projectService serviceInterface="com.arangodb.intellij.aql.db.AqlDatabaseService" serviceImplementation="com.arangodb.intellij.aql.db.AqlDatabaseServiceImpl"/>
+      <projectService serviceInterface="com.arangodb.intellij.aql.db.AqlDatabaseService"
+                      serviceImplementation="com.arangodb.intellij.aql.db.AqlDatabaseServiceImpl"/>
       <intentionAction>
         <category>AQL</category>
         <className>com.arangodb.intellij.aql.intentions.AqlCreateConnectionIntention</className>

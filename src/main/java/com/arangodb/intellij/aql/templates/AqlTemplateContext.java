@@ -2,10 +2,9 @@ package com.arangodb.intellij.aql.templates;
 
 import org.jetbrains.annotations.NotNull;
 
-import com.arangodb.intellij.aql.file.AqlFileType;
+import com.arangodb.intellij.aql.fileTypes.AqlFileType;
 import com.intellij.codeInsight.template.TemplateActionContext;
 import com.intellij.codeInsight.template.TemplateContextType;
-import com.intellij.psi.PsiFile;
 
 public class AqlTemplateContext extends TemplateContextType {
     protected AqlTemplateContext() {

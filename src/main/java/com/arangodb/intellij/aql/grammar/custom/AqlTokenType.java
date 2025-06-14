@@ -11,7 +11,7 @@ public class AqlTokenType extends IElementType {
 
 
     public AqlTokenType(@NotNull @NonNls String name) {
-        super(name, AqlLanguage.AQL_LANGUAGE);
+        super(name, AqlLanguage.INSTANCE);
         this.name = name;
     }
 

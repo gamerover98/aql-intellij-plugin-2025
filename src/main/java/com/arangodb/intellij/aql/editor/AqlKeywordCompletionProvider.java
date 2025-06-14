@@ -14,7 +14,7 @@ public final class AqlKeywordCompletionProvider extends AqlCompletionProvider {
 
     public static final ElementPattern<PsiElement> PATTERN = PlatformPatterns
             .psiElement()
-            .withLanguage(AqlLanguage.AQL_LANGUAGE)
+            .withLanguage(AqlLanguage.INSTANCE)
             .andNot(PlatformPatterns.psiElement(AqlTypes.COMMENT))
             .andNot(PlatformPatterns.psiElement(AqlTypes.LINE_COMMENT));
 

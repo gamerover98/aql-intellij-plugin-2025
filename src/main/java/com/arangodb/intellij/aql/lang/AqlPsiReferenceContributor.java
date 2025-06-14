@@ -18,7 +18,7 @@ public class AqlPsiReferenceContributor extends PsiReferenceContributor {
     @Override
     public void registerReferenceProviders(@NotNull final PsiReferenceRegistrar registrar) {
         registrar.registerReferenceProvider(
-                PlatformPatterns.psiElement().withLanguage(AqlLanguage.AQL_LANGUAGE),
+                PlatformPatterns.psiElement().withLanguage(AqlLanguage.INSTANCE),
                 new PsiReferenceProvider() {
                     @NotNull
                     @Override

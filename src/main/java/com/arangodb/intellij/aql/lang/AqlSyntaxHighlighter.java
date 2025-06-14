@@ -43,7 +43,7 @@ public class AqlSyntaxHighlighter extends SyntaxHighlighterBase {
     @Override
     public TextAttributesKey[] getTokenHighlights(final IElementType type) {
         final Language language = type.getLanguage();
-        if (!language.equals(AqlLanguage.AQL_LANGUAGE)) {
+        if (!language.equals(AqlLanguage.INSTANCE)) {
             return EMPTY;
         }
         if (type.equals(AqlTypes.L_COMMENT)) {

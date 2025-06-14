@@ -47,7 +47,7 @@ public class AqlCodeStyleSettingsProvider extends CodeStyleSettingsProvider {
 
     private static class SimpleCodeStyleMainPanel extends TabbedLanguageCodeStylePanel {
         public SimpleCodeStyleMainPanel(CodeStyleSettings currentSettings, CodeStyleSettings settings) {
-            super(AqlLanguage.AQL_LANGUAGE, currentSettings, settings);
+            super(AqlLanguage.INSTANCE, currentSettings, settings);
         }
 
     }

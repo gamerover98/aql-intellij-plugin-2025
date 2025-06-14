@@ -9,7 +9,7 @@ public class AqlLanguageCodeStyleSettingsProvider extends LanguageCodeStyleSetti
     @NotNull
     @Override
     public Language getLanguage() {
-        return AqlLanguage.AQL_LANGUAGE;
+        return AqlLanguage.INSTANCE;
     }
 
     @Override

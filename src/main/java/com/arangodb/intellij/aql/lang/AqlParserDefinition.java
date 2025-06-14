@@ -1,6 +1,6 @@
 package com.arangodb.intellij.aql.lang;
 
-import com.arangodb.intellij.aql.file.AqlFile;
+import com.arangodb.intellij.aql.fileTypes.AqlFile;
 import com.arangodb.intellij.aql.grammar.custom.psi.AqlLexerAdapter;
 import com.arangodb.intellij.aql.grammar.generated.AqlParser;
 import com.arangodb.intellij.aql.grammar.generated.psi.AqlTypes;

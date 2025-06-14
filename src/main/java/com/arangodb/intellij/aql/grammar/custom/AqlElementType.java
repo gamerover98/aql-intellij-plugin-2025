@@ -11,7 +11,7 @@ public class AqlElementType extends IElementType {
 
 
     public AqlElementType(@NotNull @NonNls String name) {
-        super(name, AqlLanguage.AQL_LANGUAGE);
+        super(name, AqlLanguage.INSTANCE);
         this.name = name;
     }
 

@@ -1,6 +1,6 @@
 package com.arangodb.intellij.aql.lang;
 
-import com.arangodb.intellij.aql.file.AqlFile;
+import com.arangodb.intellij.aql.fileTypes.AqlFile;
 import com.intellij.ide.structureView.StructureViewModel;
 import com.intellij.ide.structureView.StructureViewModelBase;
 import com.intellij.ide.structureView.StructureViewTreeElement;

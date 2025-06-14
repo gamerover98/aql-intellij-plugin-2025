@@ -1,5 +1,6 @@
 package com.arangodb.intellij.aql.file;
 
+import com.arangodb.intellij.aql.fileTypes.AqlFile;
 import com.arangodb.intellij.aql.util.Icons;
 import com.intellij.ide.actions.CreateFileFromTemplateAction;
 import com.intellij.ide.actions.CreateFileFromTemplateDialog;
