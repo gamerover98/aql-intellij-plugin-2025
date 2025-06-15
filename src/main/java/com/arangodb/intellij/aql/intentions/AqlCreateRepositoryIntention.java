@@ -29,7 +29,7 @@ package com.arangodb.intellij.aql.intentions;
 //import com.intellij.psi.util.PsiTreeUtil;
 //import com.intellij.psi.util.PsiUtilCore;
 
-//TODO: fixme
+//TODO: must be re-implemented.
 public class AqlCreateRepositoryIntention /*extends CreateSubclassAction*/ {
 
 /*
