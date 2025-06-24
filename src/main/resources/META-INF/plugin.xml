@@ -69,7 +69,12 @@
 
       <lang.findUsagesProvider language="AQL" implementationClass="com.arangodb.intellij.aql.lang.AqlFindUsagesProvider"/>
       <lang.documentationProvider language="AQL" implementationClass="com.arangodb.intellij.aql.lang.AqlDocumentationProvider"/>
-      <lang.syntaxHighlighterFactory language="AQL" implementationClass="com.arangodb.intellij.aql.syntax.AqlSyntaxHighlighterFactory"/>
+
+        <!-- Syntax Highlighter:
+             https://plugins.jetbrains.com/docs/intellij/syntax-highlighter-and-color-settings-page.html#register-the-syntax-highlighter-factory -->
+        <lang.syntaxHighlighterFactory
+                language="AQL"
+                implementationClass="com.arangodb.intellij.aql.syntax.AqlSyntaxHighlighterFactory"/>
 
         <!-- Refers to the mechanism used to create Language-Specific
              PSI elements from an Abstract Syntax Tree (AST) -->
@@ -80,10 +85,25 @@
       <codeStyleSettingsProvider implementation="com.simpleplugin.SimpleCodeStyleSettingsProvider"/>
       <langCodeStyleSettingsProvider implementation="com.simpleplugin.SimpleLanguageCodeStyleSettingsProvider"/>
       -->
-      <codeStyleSettingsProvider implementation="com.arangodb.intellij.aql.syntax.AqlCodeStyleSettingsProvider"/>
-      <langCodeStyleSettingsProvider implementation="com.arangodb.intellij.aql.syntax.AqlLanguageCodeStyleSettingsProvider"/>
-      <annotator language="AQL" implementationClass="com.arangodb.intellij.aql.syntax.AqlSyntaxHighlighterAnnotator"/>
-      <lang.commenter language="AQL" implementationClass="com.arangodb.intellij.aql.syntax.AqlCommenter"/>
+
+        <!-- Code Style Settings Provider:
+             https://plugins.jetbrains.com/docs/intellij/code-style-settings.html#register-the-code-style-settings-provider -->
+        <codeStyleSettingsProvider implementation="com.arangodb.intellij.aql.syntax.AqlCodeStyleSettingsProvider"/>
+
+        <!-- Language Code Style Settings Provider:
+             https://plugins.jetbrains.com/docs/intellij/code-style-settings.html#define-the-language-code-style-settings-provider -->
+        <langCodeStyleSettingsProvider
+                implementation="com.arangodb.intellij.aql.syntax.AqlLanguageCodeStyleSettingsProvider"/>
+
+        <!-- Annotator: https://plugins.jetbrains.com/docs/intellij/annotator.html -->
+        <annotator language="AQL"
+                   implementationClass="com.arangodb.intellij.aql.syntax.AqlSyntaxHighlighterAnnotator"/>
+
+        <!-- Commenter: https://plugins.jetbrains.com/docs/intellij/commenter.html -->
+        <lang.commenter
+                language="AQL"
+                implementationClass="com.arangodb.intellij.aql.syntax.AqlCommenter"/>
+
       <completion.contributor language="AQL" implementationClass="com.arangodb.intellij.aql.editor.AqlCodeCompletionContributor"/>
 
       <!--
@@ -93,10 +113,12 @@
       -->
       <projectService serviceInterface="com.arangodb.intellij.aql.db.AqlDatabaseService"
                       serviceImplementation="com.arangodb.intellij.aql.db.AqlDatabaseServiceImpl"/>
-      <intentionAction>
-        <category>AQL</category>
-        <className>com.arangodb.intellij.aql.intentions.AqlCreateConnectionIntention</className>
-      </intentionAction>
+
+        <intentionAction>
+            <language>AQL</language>
+            <className>com.arangodb.intellij.aql.intentions.AqlCreateConnectionIntention</className>
+        </intentionAction>
+
         <!-- Temporarily disabled because the AqlCreateRepositoryIntention must be re-implemented -->
         <!--<intentionAction>
           <category>AQL</category>-->

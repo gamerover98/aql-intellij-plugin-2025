@@ -18,26 +18,26 @@ import java.util.Map;
 public class AqlColorSettingsPage implements ColorSettingsPage {
 
     private static final AttributesDescriptor[] DESCRIPTORS = new AttributesDescriptor[]{
-            new AttributesDescriptor("Line comment", AqlSyntaxColors.LINE_COMMENT),
-            new AttributesDescriptor("Block comment", AqlSyntaxColors.BLOCK_COMMENT),
-            new AttributesDescriptor("Keyword", AqlSyntaxColors.KEYWORD),
-            new AttributesDescriptor("Function", AqlSyntaxColors.FUNCTION),
-            new AttributesDescriptor("String", AqlSyntaxColors.STRING),
-            new AttributesDescriptor("Number", AqlSyntaxColors.NUMBER),
-            new AttributesDescriptor("Variable", AqlSyntaxColors.VARIABLE),
-            new AttributesDescriptor("Variable Placeholder", AqlSyntaxColors.VARIABLE_PLACE_HOLDER),
-            new AttributesDescriptor("Variable Parameter", AqlSyntaxColors.PARAMETER_VARIABLE),
-            new AttributesDescriptor("Property Lookup", AqlSyntaxColors.PROPERTY_LOOKUP),
+            new AttributesDescriptor("Line comment", AqlSyntaxColors.INSTANCE.getLINE_COMMENT()),
+            new AttributesDescriptor("Block comment", AqlSyntaxColors.INSTANCE.getBLOCK_COMMENT()),
+            new AttributesDescriptor("Keyword", AqlSyntaxColors.INSTANCE.getKEYWORD()),
+            new AttributesDescriptor("Function", AqlSyntaxColors.INSTANCE.getFUNCTION()),
+            new AttributesDescriptor("String", AqlSyntaxColors.INSTANCE.getSTRING()),
+            new AttributesDescriptor("Number", AqlSyntaxColors.INSTANCE.getNUMBER()),
+            new AttributesDescriptor("Variable", AqlSyntaxColors.INSTANCE.getVARIABLE()),
+            new AttributesDescriptor("Variable Placeholder", AqlSyntaxColors.INSTANCE.getVARIABLE_PLACE_HOLDER()),
+            new AttributesDescriptor("Variable Parameter", AqlSyntaxColors.INSTANCE.getPARAMETER_VARIABLE()),
+            new AttributesDescriptor("Property Lookup", AqlSyntaxColors.INSTANCE.getPROPERTY_LOOKUP()),
             // TODO
 
-            new AttributesDescriptor("Operation sign", AqlSyntaxColors.OPERATION_SIGN),
-            new AttributesDescriptor("Parentheses", AqlSyntaxColors.PARENTHESES),
-            new AttributesDescriptor("Braces", AqlSyntaxColors.SQUARE_BRACES),
-            new AttributesDescriptor("Comma", AqlSyntaxColors.COMMA),
-            new AttributesDescriptor("Dot", AqlSyntaxColors.DOT),
-            new AttributesDescriptor("EscapeCharacters", AqlSyntaxColors.ESCAPE_CHARACTERS),
-            // new AttributesDescriptor("Expression", AqlSyntaxColors.OBJECT_EXPRESSION),
-            new AttributesDescriptor("System Property", AqlSyntaxColors.SYSTEM_PROPERTY)
+            new AttributesDescriptor("Operation sign", AqlSyntaxColors.INSTANCE.getOPERATION_SIGN()),
+            new AttributesDescriptor("Parentheses", AqlSyntaxColors.INSTANCE.getPARENTHESES()),
+            new AttributesDescriptor("Braces", AqlSyntaxColors.INSTANCE.getSQUARE_BRACES()),
+            new AttributesDescriptor("Comma", AqlSyntaxColors.INSTANCE.getCOMMA()),
+            new AttributesDescriptor("Dot", AqlSyntaxColors.INSTANCE.getDOT()),
+            new AttributesDescriptor("EscapeCharacters", AqlSyntaxColors.INSTANCE.getESCAPE_CHARACTERS()),
+            // new AttributesDescriptor("Expression", AqlSyntaxColors.INSTANCE.getOBJECT_EXPRESSION()),
+            new AttributesDescriptor("System Property", AqlSyntaxColors.INSTANCE.getSYSTEM_PROPERTY())
 
     };
 

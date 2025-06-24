@@ -15,8 +15,18 @@ private val EMPTY_PSI_REF_ARRAY = arrayOfNulls<PsiReference>(0)
 // Priority for the reference provider to ensure it is checked before others.
 private const val REFERENCE_PROVIDER_PRIORITY = PsiReferenceRegistrar.HIGHER_PRIORITY
 
+/**
+ * Contributes custom PSI reference providers for the AQL language in the IntelliJ Platform.
+ *
+ * This implementation registers reference providers that enable IDE features such as
+ * `Go to Definition` and `Find Usages` for AQL elements. It determines the type of each
+ * AQL PSI element and creates the appropriate reference, improving code navigation and
+ * analysis for users working with AQL in the IDE.
+ *
+ * @property log Logger instance for diagnostic output.
+ */
 class AqlPsiReferenceContributor(
-    val log: Logger = LoggerFactory.getLogger(AqlPsiReferenceContributor::class.java)
+    private val log: Logger = LoggerFactory.getLogger(AqlPsiReferenceContributor::class.java)
 ) : PsiReferenceContributor() {
 
     /**
