@@ -1,0 +1,11 @@
+src/
+.gradle/
+.intellijPlatform/
+.kotlin/
+idea-sandbox/
+build/
+img/
+.run/
+.github/
+.claude/
+.rtk/

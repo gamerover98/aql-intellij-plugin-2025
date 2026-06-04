@@ -1,6 +1,8 @@
 services:
   arangodb:
-    image: arangodb:latest
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
     environment:
       # Authentication is intentionally disabled for local development/testing only.
       # NEVER use ARANGO_NO_AUTH=1 in production.
@@ -13,7 +15,6 @@ services:
     ports:
       - "8529:8529"
     volumes:
-      - ./docker/init:/docker-entrypoint-initdb.d:ro
       - arangodb_data:/var/lib/arangodb3
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8529/_api/version || exit 1"]
