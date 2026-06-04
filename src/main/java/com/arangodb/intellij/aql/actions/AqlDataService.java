@@ -32,7 +32,6 @@ import com.arangodb.intellij.aql.util.AqlUtils;
 import com.arangodb.intellij.aql.util.log;
 import com.arangodb.model.AqlQueryExplainOptions;
 import com.google.common.base.Strings;
-import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.ui.CheckedTreeNode;
 import com.intellij.util.messages.MessageBus;
@@ -58,8 +57,8 @@ public final class AqlDataService {
     private AqlDataService(final Project project) {
         this.project = project;
         this.messageBus = project.getMessageBus();
-        this.service = ServiceManager.getService(project, AqlDatabaseService.class);
-        this.stateComponent = project.getComponent(DataWindowState.class);
+        this.service = project.getService(AqlDatabaseService.class);
+        this.stateComponent = project.getService(DataWindowState.class);
     }
 
 
@@ -145,7 +144,7 @@ public final class AqlDataService {
     }
 
     private AqlDataService executeQuery(final String query, final Map<String, Object> bindVars, final QueryType type) {
-        final DataWindowState component = project.getComponent(DataWindowState.class);
+        final DataWindowState component = project.getService(DataWindowState.class);
         final ArangoDbServer state = component.getState();
         final ActionBusEvent queryPlanEvent = messageBus.syncPublisher(ActionBusEvent.AQL_QUERY_RESULT);
         try {

@@ -32,7 +32,7 @@ public abstract class AqlNamedElementImpl extends ASTWrapperPsiElement implement
     }
 
     @Override
-    public PsiElement setName(@NlsSafe @NotNull String s) throws IncorrectOperationException {
-        return null; //TODO: added to fix compiler error, implement if needed.
+    public PsiElement setName(@NlsSafe @NotNull String name) throws IncorrectOperationException {
+        return AqlPsiUtil.setName(this, name);
     }
 }

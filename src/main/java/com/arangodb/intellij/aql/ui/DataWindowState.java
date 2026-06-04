@@ -2,7 +2,7 @@ package com.arangodb.intellij.aql.ui;
 
 import com.arangodb.intellij.aql.model.ArangoDbServer;
 import com.intellij.openapi.components.PersistentStateComponent;
-import com.intellij.openapi.components.ProjectComponent;
+import com.intellij.openapi.components.Service;
 import com.intellij.openapi.components.State;
 import com.intellij.openapi.components.Storage;
 import com.intellij.util.xmlb.annotations.Transient;
@@ -10,9 +10,9 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.Objects;
 
+@Service(Service.Level.PROJECT)
 @State(name = "ArangoDB.DataSource", storages = {@Storage("ArangoDB_DataSource.xml")})
-public class DataWindowState implements ProjectComponent, PersistentStateComponent<ArangoDbServer> {
-
+public class DataWindowState implements PersistentStateComponent<ArangoDbServer> {
 
     private boolean processed;
     private ArangoDbServer state;
@@ -31,13 +31,6 @@ public class DataWindowState implements ProjectComponent, PersistentStateCompone
         return state;
     }
 
-    @Override
-    public void initComponent() {
-        if (state == null) {
-            state = new ArangoDbServer();
-        }
-    }
-
     @Transient
     public boolean isProcessed() {
         return processed;
@@ -45,12 +38,6 @@ public class DataWindowState implements ProjectComponent, PersistentStateCompone
 
     public void setProcessed(final boolean processed) {
         this.processed = processed;
-    }
-
-    @NotNull
-    @Override
-    public String getComponentName() {
-        return "ArangoDB.DataSource";
     }
 
     @Override

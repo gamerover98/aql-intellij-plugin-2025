@@ -113,6 +113,7 @@
       -->
       <projectService serviceInterface="com.arangodb.intellij.aql.db.AqlDatabaseService"
                       serviceImplementation="com.arangodb.intellij.aql.db.AqlDatabaseServiceImpl"/>
+      <projectService serviceImplementation="com.arangodb.intellij.aql.ui.DataWindowState"/>
 
         <intentionAction>
             <language>AQL</language>
@@ -163,14 +164,4 @@
         </group>
     </actions>
 
-    <application-components>
-        <component>
-            <implementation-class>com.arangodb.intellij.aql.ui.DataWindowState</implementation-class>
-        </component>
-    </application-components>
-    <project-components>
-        <component>
-            <implementation-class>com.arangodb.intellij.aql.ui.DataWindowState</implementation-class>
-        </component>
-    </project-components>
 </idea-plugin>

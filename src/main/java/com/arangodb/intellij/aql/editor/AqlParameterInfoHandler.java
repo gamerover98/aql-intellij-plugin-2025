@@ -2,12 +2,12 @@
 
 package com.arangodb.intellij.aql.editor;
 
+import com.arangodb.intellij.aql.grammar.custom.psi.AqlPsiUtil;
 import com.arangodb.intellij.aql.grammar.generated.psi.AqlExpressionType;
 import com.arangodb.intellij.aql.grammar.generated.psi.AqlFunctionExpression;
 import com.arangodb.intellij.aql.grammar.generated.psi.AqlNamedFunctions;
 import com.arangodb.intellij.aql.grammar.generated.psi.AqlParameterVariable;
-
-
+import com.arangodb.intellij.aql.grammar.generated.psi.AqlTypes;
 import com.arangodb.intellij.aql.util.JSON;
 import com.google.common.base.Charsets;
 import com.google.common.io.CharStreams;
@@ -17,7 +17,6 @@ import com.intellij.lang.parameterInfo.CreateParameterInfoContext;
 import com.intellij.lang.parameterInfo.ParameterInfoHandlerWithTabActionSupport;
 import com.intellij.lang.parameterInfo.ParameterInfoUIContext;
 import com.intellij.lang.parameterInfo.UpdateParameterInfoContext;
-//import com.intellij.psi.JavaTokenType;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.tree.IElementType;
@@ -40,7 +39,7 @@ public class AqlParameterInfoHandler implements ParameterInfoHandlerWithTabActio
     private static final Logger log = LoggerFactory.getLogger(AqlParameterInfoHandler.class);
     private static final ASTNode[] AST_NODES = new ASTNode[0];
     private static final AqlParameterVariable[] EMPTY = new AqlParameterVariable[0];
-    private AqlParams params;
+    private static volatile AqlParams params;
     @SuppressWarnings("rawtypes")
     private static final Set<Class> CLASS_SET = Collections.singleton(AqlNamedFunctions.class);
 
@@ -116,7 +115,7 @@ public class AqlParameterInfoHandler implements ParameterInfoHandlerWithTabActio
         if (o instanceof AqlNamedFunctions) {
             final AqlNamedFunctions p = (AqlNamedFunctions) o;
             // TODO implement parameter offsets etc.
-            final String functionName = p.getText(); // Function name
+            final String functionName = AqlPsiUtil.getFunctionName(p);
             final List<String> params = getParameters(functionName);
             boolean first = true;
             final StringBuilder builder = new StringBuilder(params.size() * 20);
@@ -145,10 +144,10 @@ public class AqlParameterInfoHandler implements ParameterInfoHandlerWithTabActio
     }
 
     @NotNull
-    @Override // TODO: fixme (@NotNull annotation)
-    public AqlParameterVariable /*@NotNull*/ [] getActualParameters(@NotNull final AqlNamedFunctions o) {
+    @Override
+    public AqlParameterVariable[] getActualParameters(@NotNull final AqlNamedFunctions o) {
 
-        final List<String> parameters = getParameters(o.getText()); // Function name
+        final List<String> parameters = getParameters(AqlPsiUtil.getFunctionName(o));
         final List<AqlParameterVariable> variables = new ArrayList<>();
         // TODO upgrade check
        /* for (String parameter : parameters) {
@@ -162,15 +161,13 @@ public class AqlParameterInfoHandler implements ParameterInfoHandlerWithTabActio
     @NotNull
     @Override
     public IElementType getActualParameterDelimiterType() {
-        //return JavaTokenType.COMMA; TODO: fixme
-        return null;
+        return AqlTypes.T_COMMA;
     }
 
     @NotNull
     @Override
     public IElementType getActualParametersRBraceType() {
-        //return JavaTokenType.RBRACE; TODO: fixme
-        return null;
+        return AqlTypes.T_CLOSE;
     }
 
     @NotNull
