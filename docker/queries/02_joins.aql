@@ -1,0 +1,35 @@
+// ─── Joins via subqueries and edge traversal ─────────────────────────────────
+// Tests: nested FOR, LET, COLLECT, function completion (CONCAT, LENGTH, etc.)
+
+// Each order with its user and line items
+FOR o IN orders
+    LET buyer = FIRST(
+        FOR v IN 1..1 INBOUND o user_orders RETURN v
+    )
+    LET items = (
+        FOR v, e IN 1..1 OUTBOUND o order_items
+            RETURN { product: v.name, qty: e.quantity, unitPrice: e.unitPrice }
+    )
+    RETURN {
+        orderId:   o._key,
+        status:    o.status,
+        total:     o.total,
+        createdAt: o.createdAt,
+        buyer:     buyer.name,
+        items:     items
+    }
+
+// Users with their total spend (completed orders only)
+FOR u IN users
+    LET spend = SUM(
+        FOR v, e IN 1..2 OUTBOUND u user_orders, order_items
+            FILTER LENGTH(
+                FOR o IN 1..1 INBOUND v user_orders
+                    FILTER o.status == "completed"
+                    RETURN 1
+            ) > 0
+            RETURN e.unitPrice * e.quantity
+    )
+    FILTER spend > 0
+    SORT spend DESC
+    RETURN { user: u.name, city: u.city, totalSpend: spend }

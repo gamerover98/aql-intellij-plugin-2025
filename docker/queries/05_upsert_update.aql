@@ -1,0 +1,26 @@
+// ─── Write operations ─────────────────────────────────────────────────────────
+// Tests: INSERT / UPDATE / UPSERT / REMOVE syntax highlighting
+
+// Insert a new user (safe to run multiple times — UPSERT)
+UPSERT { email: "test@example.com" }
+INSERT { name: "Test User", email: "test@example.com", age: 25, city: "Rome", active: true, role: "customer" }
+UPDATE { active: true }
+IN users
+
+// Increase stock for all electronics by 10
+FOR p IN products
+    FILTER p.category == "electronics"
+    UPDATE p WITH { stock: p.stock + 10 } IN products
+    RETURN { name: NEW.name, newStock: NEW.stock }
+
+// Mark all processing orders older than 2024-03-01 as delayed
+FOR o IN orders
+    FILTER o.status == "processing"
+    FILTER o.createdAt < "2024-03-01"
+    UPDATE o WITH { status: "delayed" } IN orders
+    RETURN NEW
+
+// Remove test user created above
+FOR u IN users
+    FILTER u.email == "test@example.com"
+    REMOVE u IN users

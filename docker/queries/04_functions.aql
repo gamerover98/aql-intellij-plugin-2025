@@ -1,0 +1,47 @@
+// ─── Built-in function coverage ───────────────────────────────────────────────
+// Tests: parameter info popup (Ctrl+P), function name completion
+
+// String functions
+FOR u IN users
+    RETURN {
+        upper:     UPPER(u.name),
+        lower:     LOWER(u.email),
+        concat:    CONCAT(u.name, " — ", u.city),
+        contains:  CONTAINS(u.email, "example"),
+        split:     SPLIT(u.email, "@"),
+        substring: SUBSTRING(u.name, 0, 5),
+        length:    LENGTH(u.name)
+    }
+
+// Math and date functions
+FOR o IN orders
+    RETURN {
+        id:        o._key,
+        total:     ROUND(o.total * 1.22),
+        floorCent: FLOOR(o.total * 100) / 100,
+        year:      DATE_YEAR(o.createdAt),
+        month:     DATE_MONTH(o.createdAt),
+        iso:       DATE_ISO8601(o.createdAt)
+    }
+
+// Array and object functions
+FOR u IN users
+    LET tags = ["verified", "active", "local"]
+    RETURN {
+        name:    u.name,
+        keys:    KEYS(u),
+        merged:  MERGE(u, { verified: true }),
+        has_age: HAS(u, "age"),
+        first3:  SLICE(tags, 0, 2)
+    }
+
+// Aggregation functions
+LET prices = (FOR p IN products RETURN p.price)
+RETURN {
+    min:    MIN(prices),
+    max:    MAX(prices),
+    avg:    ROUND(AVERAGE(prices) * 100) / 100,
+    sum:    SUM(prices),
+    count:  COUNT(prices),
+    sorted: SORTED(prices)
+}

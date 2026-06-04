@@ -1,0 +1,24 @@
+// ─── Basic queries ────────────────────────────────────────────────────────────
+// Tests: syntax highlighting, keyword completion, FOR / FILTER / RETURN
+
+// All active users
+FOR u IN users
+    FILTER u.active == true
+    SORT u.name ASC
+    RETURN u
+
+// Users from Rome
+FOR u IN users
+    FILTER u.city == "Rome"
+    RETURN { name: u.name, email: u.email }
+
+// Products under €50 sorted by rating
+FOR p IN products
+    FILTER p.price < 50
+    SORT p.rating DESC
+    RETURN { name: p.name, price: p.price, rating: p.rating }
+
+// Orders by status count
+FOR o IN orders
+    COLLECT status = o.status WITH COUNT INTO total
+    RETURN { status, total }

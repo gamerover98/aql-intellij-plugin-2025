@@ -1,0 +1,20 @@
+// ─── Graph traversal ─────────────────────────────────────────────────────────
+// Tests: graph syntax, OUTBOUND / INBOUND / ANY, depth ranges
+
+// All products purchased by user u1 (depth 2: user → order → product)
+FOR v IN 2..2 OUTBOUND "users/u1" GRAPH "store_graph"
+    FILTER IS_SAME_COLLECTION("products", v)
+    RETURN DISTINCT { product: v.name, category: v.category, price: v.price }
+
+// Users who bought electronics (traverse backwards from tag)
+FOR v IN 3..3 INBOUND "tags/t1" GRAPH "store_graph"
+    FILTER IS_SAME_COLLECTION("users", v)
+    RETURN DISTINCT v.name
+
+// Full path: user → orders → products for user u5
+FOR v, e, p IN 1..2 OUTBOUND "users/u5" GRAPH "store_graph"
+    RETURN {
+        depth:  LENGTH(p.vertices) - 1,
+        vertex: v._id,
+        label:  v.name != null ? v.name : v.status
+    }
