@@ -21,3 +21,6 @@ jflex-*.jar
 
 # GrammarKit generated files
 src/main/gen/**
+
+# Claude Code
+.claude/settings.local.json
