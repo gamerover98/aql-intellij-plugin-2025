@@ -9,7 +9,7 @@ import com.intellij.lang.ASTNode;
 import com.intellij.navigation.ItemPresentation;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.impl.source.tree.LeafElement;
-import com.intellij.psi.tree.TokenType;
+import com.intellij.psi.TokenType;
 import com.intellij.util.IncorrectOperationException;
 import org.jetbrains.annotations.NotNull;
 
