@@ -36,13 +36,14 @@ class AqlCreateConnectionIntention : IntentionAction {
      * @param psiFile the file in which the action is invoked
      * @return true if the intention is available, false otherwise
      */
+    // isAvailable is called on every keystroke — must not make network calls
     override fun isAvailable(
         project: Project,
         editor: Editor,
         psiFile: PsiFile
     ): Boolean =
         psiFile.language == AqlLanguage
-                && !AqlDataService.with(project).hasValidConnection()
+                && !AqlDataService.with(project).hasValidSettings()
 
     /**
      * Invokes the intention action, opening the dialog to create a new database connection.

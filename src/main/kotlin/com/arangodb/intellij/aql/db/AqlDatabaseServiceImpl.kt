@@ -5,7 +5,6 @@ import com.arangodb.ArangoDBException
 import com.arangodb.ArangoDatabase
 import com.arangodb.Protocol
 import com.arangodb.entity.CollectionType
-import com.arangodb.intellij.aql.actions.ActionResponse
 import com.arangodb.intellij.aql.actions.AqlDataService
 import com.arangodb.intellij.aql.editor.AqlKeywordElement
 import com.arangodb.intellij.aql.exc.AqlDataSourceException
@@ -89,26 +88,32 @@ class AqlDatabaseServiceImpl : AqlDatabaseService {
             }
             log.error("Invalid ArangoDB datasource", e.message ?: "")
         } catch (e: AqlDataSourceException) {
-            log.error("Invalid ArangoDB datasource", e.message ?: "")
+            // checkEmpty() throws with message — show fix-link notification once
+            AqlUtils.popupDataSourceFix(e.message ?: "Invalid ArangoDB data source", project)
         }
     }
 
-    override fun isConnectionValid(project: Project): Boolean =
-        try {
-            checkServerConnection(getServer(project), project)
+    // Silent connection probe: no notifications, no heavy schema fetch — used by isAvailable checks
+    override fun isConnectionValid(project: Project): Boolean {
+        val server = project.getService(DataWindowState::class.java).state ?: return false
+        return try {
+            checkServerConnection(server, project)
             true
         } catch (_: AqlDataSourceException) {
             false
         }
+    }
 
+    // Fetches and populates the full server model (databases, schema).
+    // Throws AqlDataSourceException on connection failure — callers are responsible for notifications.
+    @Throws(AqlDataSourceException::class)
     override fun getServer(project: Project): ArangoDbServer {
         val stateComponent = project.getService(DataWindowState::class.java)
         val server = stateComponent.state ?: return ArangoDbServer()
         val dataService = AqlDataService.with(project)
         val response = dataService.testServerConnection(server)
         if (response.isError()) {
-            dataService.sendResponse(response)
-            return server
+            throw AqlDataSourceException(response.message)
         }
         try {
             val selectedDatabaseName = server.selectedDatabaseName
@@ -127,8 +132,10 @@ class AqlDatabaseServiceImpl : AqlDatabaseService {
                     server.selectedDatabase = arangoDbDatabase
                 }
             }
+        } catch (e: AqlDataSourceException) {
+            throw e
         } catch (e: Exception) {
-            dataService.sendResponse(ActionResponse.error(e.message ?: "Unknown error"))
+            throw AqlDataSourceException(e)
         }
         return server
     }
@@ -177,8 +184,8 @@ class AqlDatabaseServiceImpl : AqlDatabaseService {
             val user = settings.user
             val selectedDatabase = settings.selectedDatabase
             val database = selectedDatabase?.name
-            checkEmpty("user", project, user)
-            checkEmpty("database", project, database)
+            checkEmpty("user", user)
+            checkEmpty("database", database)
             getDatabaseForName(settings, database!!)
         } catch (e: AqlDataSourceException) {
             throw e
@@ -197,11 +204,7 @@ class AqlDatabaseServiceImpl : AqlDatabaseService {
             .db(database)
 
     @Throws(AqlDataSourceException::class)
-    private fun checkEmpty(name: String, project: Project, value: String?) {
-        if (value.isNullOrBlank()) {
-            val message = "No $name set for ArangoDB data source"
-            AqlUtils.popupDataSourceFix(message, project)
-            throw AqlDataSourceException(message)
-        }
+    private fun checkEmpty(name: String, value: String?) {
+        if (value.isNullOrBlank()) throw AqlDataSourceException("No $name set for ArangoDB data source")
     }
 }

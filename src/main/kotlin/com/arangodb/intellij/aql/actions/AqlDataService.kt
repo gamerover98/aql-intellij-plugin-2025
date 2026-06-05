@@ -112,7 +112,12 @@ class AqlDataService private constructor(private val project: Project) {
     }
 
     fun server(): ArangoDbServer =
-        if (hasValidSettings()) service.getServer(project) else stateComponent.state ?: ArangoDbServer()
+        if (!hasValidSettings()) stateComponent.state ?: ArangoDbServer()
+        else try {
+            service.getServer(project)
+        } catch (_: AqlDataSourceException) {
+            stateComponent.state ?: ArangoDbServer()
+        }
 
     fun sendEmptyMessage(topic: Topic<ActionBusEvent>) {
         messageBus.syncPublisher(topic).onEvent(ActionEventData.EMPTY)
@@ -123,7 +128,13 @@ class AqlDataService private constructor(private val project: Project) {
             AqlUtils.popupDataSourceFix("Setup ArangoDB connection", project)
             return this
         }
-        service.refresh(service.getServer(project), project)
+        val server = try {
+            service.getServer(project)
+        } catch (e: AqlDataSourceException) {
+            AqlUtils.popupDataSourceFix(e.message ?: "Cannot connect to ArangoDB", project)
+            return this
+        }
+        service.refresh(server, project)
         val event = messageBus.syncPublisher(ActionBusEvent.AQL_SYSTEM_REFRESH_SCHEME)
         event.onEvent(ActionEventData().forName(ActionBusEvent.AQL_SYSTEM_REFRESH_SCHEME.displayName))
         return this

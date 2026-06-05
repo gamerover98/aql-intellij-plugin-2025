@@ -23,6 +23,7 @@ interface AqlDatabaseService {
     @Throws(AqlDataSourceException::class)
     fun getActiveDatabase(settings: ArangoDbServer, project: Project): ArangoDatabase
 
+    @Throws(AqlDataSourceException::class)
     fun getServer(project: Project): ArangoDbServer
     fun isConnectionValid(project: Project): Boolean
 }
