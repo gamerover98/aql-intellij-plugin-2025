@@ -29,4 +29,7 @@ interface AqlDatabaseService {
 
     /** Returns sampled field names for the given collection. Empty list when not connected or unknown collection. */
     fun getFieldNames(collectionName: String, project: Project): List<String>
+
+    /** Returns the document count for a collection, or -1 if unavailable. */
+    fun getCollectionCount(collectionName: String, project: Project): Long
 }

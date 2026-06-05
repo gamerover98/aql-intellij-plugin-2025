@@ -99,6 +99,16 @@ class AqlDatabaseServiceImpl : AqlDatabaseService {
         }
     }
 
+    override fun getCollectionCount(collectionName: String, project: Project): Long {
+        return try {
+            val state = project.getService(com.arangodb.intellij.aql.ui.DataWindowState::class.java).state
+                ?: return -1L
+            getActiveDatabase(state, project).collection(collectionName).count().count ?: -1L
+        } catch (_: Exception) {
+            -1L
+        }
+    }
+
     override fun getFieldNames(collectionName: String, project: Project): List<String> {
         fieldNamesCache.getIfPresent(collectionName)?.let { return it }
         return try {
