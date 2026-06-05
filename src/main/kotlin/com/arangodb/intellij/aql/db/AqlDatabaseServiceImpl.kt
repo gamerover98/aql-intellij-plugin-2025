@@ -34,6 +34,12 @@ class AqlDatabaseServiceImpl : AqlDatabaseService {
         .maximumSize(10)
         .build()
 
+    // Maps collectionName → sampled field names. TTL 30 min to stay fresh on schema evolution.
+    private val fieldNamesCache: Cache<String, List<String>> = CacheBuilder.newBuilder()
+        .expireAfterWrite(30, TimeUnit.MINUTES)
+        .maximumSize(50)
+        .build()
+
     override fun getAll(): Collection<LookupElement> {
         val all = mutableListOf<LookupElement>()
         all.addAll(getCollections())
@@ -90,6 +96,34 @@ class AqlDatabaseServiceImpl : AqlDatabaseService {
         } catch (e: AqlDataSourceException) {
             // checkEmpty() throws with message — show fix-link notification once
             AqlUtils.popupDataSourceFix(e.message ?: "Invalid ArangoDB data source", project)
+        }
+    }
+
+    override fun getFieldNames(collectionName: String, project: Project): List<String> {
+        fieldNamesCache.getIfPresent(collectionName)?.let { return it }
+        return try {
+            val state = project.getService(com.arangodb.intellij.aql.ui.DataWindowState::class.java).state
+                ?: return emptyList()
+            val db = getActiveDatabase(state, project)
+            // Sample up to 100 documents and collect unique top-level attribute names
+            val cursor = db.query(
+                "FOR doc IN `$collectionName` LIMIT 100 RETURN KEYS(doc, false)",
+                String::class.java
+            )
+            val fields = mutableSetOf<String>()
+            cursor.asListRemaining().forEach { raw ->
+                // raw is a JSON array string like ["_id","_key","name","age"]
+                val cleaned = raw.trimStart('[').trimEnd(']')
+                cleaned.split(",")
+                    .map { it.trim().removeSurrounding("\"") }
+                    .filter { it.isNotBlank() }
+                    .forEach { fields.add(it) }
+            }
+            val sorted = fields.sorted()
+            fieldNamesCache.put(collectionName, sorted)
+            sorted
+        } catch (_: Exception) {
+            emptyList()
         }
     }
 

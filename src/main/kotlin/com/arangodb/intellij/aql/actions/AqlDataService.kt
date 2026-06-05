@@ -33,6 +33,14 @@ class AqlDataService private constructor(private val project: Project) {
         fun with(project: Project): AqlDataService = AqlDataService(project)
     }
 
+    fun updateQuery(query: AqlQuery): AqlDataService {
+        val state = stateComponent.state ?: return this
+        if (query.name == null) return this
+        state.addQuery(query)
+        sendEmptyMessage(ActionBusEvent.AQL_QUERY_TREE_CHANGE)
+        return this
+    }
+
     fun deleteQuery(name: String) {
         val queries = getQueries()
         if (!queries.containsKey(name)) {

@@ -26,4 +26,7 @@ interface AqlDatabaseService {
     @Throws(AqlDataSourceException::class)
     fun getServer(project: Project): ArangoDbServer
     fun isConnectionValid(project: Project): Boolean
+
+    /** Returns sampled field names for the given collection. Empty list when not connected or unknown collection. */
+    fun getFieldNames(collectionName: String, project: Project): List<String>
 }

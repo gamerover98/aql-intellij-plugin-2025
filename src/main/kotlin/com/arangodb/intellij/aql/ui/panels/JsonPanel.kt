@@ -1,6 +1,7 @@
 package com.arangodb.intellij.aql.ui.panels
 
 import com.arangodb.intellij.aql.actions.ActionEventData
+import com.arangodb.intellij.aql.services.AqlResultService
 import com.arangodb.intellij.aql.ui.MessageView
 import com.arangodb.intellij.aql.util.AqlUtils
 import com.intellij.execution.impl.ConsoleViewImpl
@@ -21,8 +22,11 @@ class JsonPanel(project: Project) : ConsoleViewImpl(project, true), Disposable, 
 
     override fun dispose() = super.dispose()
 
+    fun getCurrentText(): String = editor?.document?.text ?: ""
+
     override fun onMessage(data: ActionEventData, project: Project) {
         val charSequence = data.get(ActionEventData.KEY_RESULT) ?: return
+        project.getService(AqlResultService::class.java).lastResult = charSequence
         WriteAction.run<Exception> {
             val file = AqlUtils.createDummyJsonFile(charSequence, project) ?: return@run
             val formatted = CodeStyleManager.getInstance(project).reformat(file)

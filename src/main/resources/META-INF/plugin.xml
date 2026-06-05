@@ -18,12 +18,11 @@
                     factoryClass="com.arangodb.intellij.aql.toolWindow.ServerToolWindowFactory"
                     icon="/icons/toolbarArangoDB.png"/>
 
-        <!-- Legacy tool windows for ArangoDB management and console -->
-        <!--<toolWindow id="ArangoDB Console"
+        <toolWindow id="ArangoDB Console"
                     anchor="bottom"
                     secondary="false"
                     factoryClass="com.arangodb.intellij.aql.ui.ConsoleWindowFactory"
-                    icon="/icons/toolbarArangoDB.png"/>-->
+                    icon="/icons/toolbarArangoDB.png"/>
 
         <!--
           //############################################
@@ -107,6 +106,14 @@
 
       <completion.contributor language="AQL" implementationClass="com.arangodb.intellij.aql.editor.AqlCodeCompletionContributor"/>
 
+      <localInspection language="AQL"
+                       shortName="AqlUndefinedCollection"
+                       displayName="Unknown ArangoDB collection, graph, or view"
+                       groupName="AQL"
+                       enabledByDefault="true"
+                       level="WEAK WARNING"
+                       implementationClass="com.arangodb.intellij.aql.inspections.AqlUndefinedCollectionInspection"/>
+
       <!--
         //############################################
         // Services
@@ -135,6 +142,7 @@
                 class="com.arangodb.intellij.aql.actions.AqlExecuteQueryAction" text="Execute AQL Query"
                 icon="/icons/run.svg" description="Execute AQL Query">
             <add-to-group group-id="EditorPopupMenu.Run" anchor="first"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl ENTER"/>
         </action>
         <action id="com.arangodb.intellij.aql.actions.AqlExplainQueryAction"
                 class="com.arangodb.intellij.aql.actions.AqlExplainQueryAction" text="Explain AQL Query"
@@ -155,6 +163,12 @@
                     text="Execute AQL query"
                     icon="/icons/run.svg"
                     description="Execute AQL query">
+            </action>
+            <action id="AQL.Action.Console.Export"
+                    class="com.arangodb.intellij.aql.actions.AqlExportResultsAction"
+                    text="Export Results to File"
+                    icon="/icons/query.svg"
+                    description="Save query results to a JSON file">
             </action>
             <action id="AQL.Action.Console.Clean"
                     class="com.arangodb.intellij.aql.actions.AqlEmptyLogAction"

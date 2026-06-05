@@ -7,15 +7,19 @@ import com.arangodb.intellij.aql.services.ArangoProjectService
 import com.arangodb.intellij.aql.ui.actions.*
 import com.arangodb.intellij.aql.ui.renderers.AqlNodeModel
 import com.arangodb.intellij.aql.ui.renderers.AqlNodeRenderer
+import com.arangodb.intellij.aql.ui.windows.AqlConsoleWindow
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.ui.CheckedTreeNode
 import com.intellij.ui.ToolbarDecorator
 import com.intellij.ui.dsl.builder.Align
 import com.intellij.ui.dsl.builder.panel
 import com.intellij.ui.treeStructure.Tree
 import java.awt.BorderLayout
+import java.awt.event.MouseAdapter
+import java.awt.event.MouseEvent
 import javax.swing.JPanel
 import javax.swing.BorderFactory
 
@@ -55,6 +59,22 @@ class ServerToolWindow(private val project: Project) : Disposable {
         }
 
         // Configure the schema tree and its toolbar actions.
+        schemaTree.addMouseListener(object : MouseAdapter() {
+            override fun mouseClicked(e: MouseEvent) {
+                if (e.clickCount != 2) return
+                val path = schemaTree.getPathForLocation(e.x, e.y) ?: return
+                val node = path.lastPathComponent as? CheckedTreeNode ?: return
+                val model = node.userObject as? AqlNodeModel ?: return
+                if (model.type != AqlNodeModel.Type.COLLECTION && model.type != AqlNodeModel.Type.EDGE) return
+                val collectionName = model.displayName ?: return
+                val service = AqlDataService.with(project)
+                service.executeQuery("FOR doc IN `$collectionName` LIMIT 100 RETURN doc")
+                ToolWindowManager.getInstance(project)
+                    .getToolWindow(AqlConsoleWindow.WINDOW_ID)
+                    ?.activate(null, true)
+            }
+        })
+
         schemePanel.add(
             ToolbarDecorator
                 .createDecorator(schemaTree)

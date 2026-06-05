@@ -8,5 +8,6 @@ class AqlCodeCompletionContributor : CompletionContributor() {
         extend(CompletionType.BASIC, AqlKeywordCompletionProvider.PATTERN, AqlKeywordCompletionProvider())
         extend(CompletionType.BASIC, AqlKeywordCompletionProvider.PATTERN, AqlDatabaseCompletionProvider())
         extend(CompletionType.BASIC, AqlKeywordCompletionProvider.PATTERN, AqlContextCompletionProvider())
+        extend(CompletionType.BASIC, AqlKeywordCompletionProvider.PATTERN, AqlFieldCompletionProvider())
     }
 }
