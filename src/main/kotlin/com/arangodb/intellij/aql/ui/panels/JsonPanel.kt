@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.SerializationFeature
 import com.intellij.execution.impl.ConsoleViewImpl
 import com.intellij.openapi.Disposable
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.WriteAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
@@ -34,14 +35,18 @@ class JsonPanel(project: Project) : ConsoleViewImpl(project, true), Disposable, 
         } catch (_: Exception) {
             raw
         }
-        WriteAction.run<Exception> {
-            editor?.document?.setText(pretty)
+        ApplicationManager.getApplication().invokeLater {
+            WriteAction.run<Exception> {
+                editor?.document?.setText(pretty)
+            }
         }
     }
 
     override fun onClean(project: Project) {
-        WriteAction.run<Exception> {
-            editor?.document?.setText("")
+        ApplicationManager.getApplication().invokeLater {
+            WriteAction.run<Exception> {
+                editor?.document?.setText("")
+            }
         }
     }
 }
