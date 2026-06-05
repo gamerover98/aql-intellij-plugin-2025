@@ -7,12 +7,11 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.platform.backend.documentation.DocumentationResult
 import com.intellij.platform.backend.documentation.DocumentationTarget
 import com.intellij.platform.backend.presentation.TargetPresentation
-import java.awt.Image
 import java.io.InputStreamReader
 import java.nio.charset.StandardCharsets
+import java.util.Base64
 import java.util.Optional
 import java.util.concurrent.TimeUnit
-import javax.imageio.ImageIO
 
 class AqlDocumentationTarget(
     private val key: String,
@@ -33,35 +32,40 @@ class AqlDocumentationTarget(
             DocType.GRAPH -> "<b>$key</b><br/>ArangoDB graph"
             DocType.VIEW -> "<b>$key</b><br/>ArangoDB view"
         }
-
-        // Pre-load images referenced in the HTML into a URL→Image map.
-        // The map keys must match the src attribute values exactly.
-        val imageMap: Map<String, Image> = IMAGE_URL_REGEX.findAll(html)
-            .map { it.groupValues[1] }
-            .mapNotNull { url ->
-                val resourcePath = if (url.startsWith("/")) url else "/docs/$url"
-                loadImage(resourcePath)?.let { url to it }
-            }
-            .toMap()
-
-        return if (imageMap.isEmpty()) {
-            DocumentationResult.documentation(html)
-        } else {
-            DocumentationResult.documentation(html).images(imageMap)
-        }
+        return DocumentationResult.documentation(embedImages(html))
     }
-
-    private fun loadImage(resourcePath: String): Image? =
-        try {
-            AqlDocumentationTarget::class.java
-                .getResourceAsStream(resourcePath)
-                ?.use { ImageIO.read(it) }
-        } catch (_: Exception) { null }
 
     companion object {
         private val log = Logger.getInstance(AqlDocumentationTarget::class.java)
-        private val IMAGE_URL_REGEX =
+
+        // Matches src attributes referencing image files (relative or absolute paths).
+        private val IMAGE_SRC_REGEX =
             Regex("""src="([^"]+\.(png|jpe?g|gif|svg))"""", RegexOption.IGNORE_CASE)
+
+        // Embeds <img src="..."> as base64 data URIs so the HTML renderer can display
+        // them without needing an external URL resolver. Relative paths are resolved
+        // against /docs/; absolute paths are used as-is.
+        private fun embedImages(html: String): String =
+            html.replace(IMAGE_SRC_REGEX) { match ->
+                val src = match.groupValues[1]
+                val resourcePath = if (src.startsWith("/")) src else "/docs/$src"
+                val ext = resourcePath.substringAfterLast('.').lowercase()
+                val mime = when (ext) {
+                    "jpg", "jpeg" -> "image/jpeg"
+                    "gif"         -> "image/gif"
+                    "svg"         -> "image/svg+xml"
+                    else          -> "image/png"
+                }
+                val encoded = loadBase64(resourcePath)
+                if (encoded != null) """src="data:$mime;base64,$encoded"""" else match.value
+            }
+
+        private fun loadBase64(resourcePath: String): String? =
+            try {
+                AqlDocumentationTarget::class.java
+                    .getResourceAsStream(resourcePath)
+                    ?.use { Base64.getEncoder().encodeToString(it.readBytes()) }
+            } catch (_: Exception) { null }
 
         // Guava caches don't allow null values; Optional wraps nullable HTML.
         private val htmlCache = CacheBuilder.newBuilder()
