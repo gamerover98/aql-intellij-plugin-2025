@@ -32,7 +32,8 @@ class AqlDocumentationProvider : AbstractDocumentationProvider() {
                         AqlDocumentationProvider::class.java
                             .getResourceAsStream("/docs/$key.html")
                             ?.use { stream ->
-                                InputStreamReader(stream, StandardCharsets.UTF_8).readText()
+                                val html = InputStreamReader(stream, StandardCharsets.UTF_8).readText()
+                                processHtml(html)
                             } ?: notFound
                     } catch (_: Exception) {
                         notFound
@@ -88,6 +89,30 @@ class AqlDocumentationProvider : AbstractDocumentationProvider() {
             else -> null
         }
     }
+
+    // Rewrites <img src="..."> references to inline base64 data URIs so IntelliJ's
+    // HTML renderer (which has no classpath URL resolver) can display them.
+    private fun processHtml(html: String): String =
+        html.replace(Regex("""src="([^"]+\.(png|jpe?g|gif|svg))"""", RegexOption.IGNORE_CASE)) { match ->
+            val src = match.groupValues[1]
+            val resourcePath = if (src.startsWith("/")) src else "/docs/$src"
+            val ext = resourcePath.substringAfterLast('.').lowercase()
+            val mime = when (ext) {
+                "jpg", "jpeg" -> "image/jpeg"
+                "gif"         -> "image/gif"
+                "svg"         -> "image/svg+xml"
+                else          -> "image/png"
+            }
+            val encoded = loadImageAsBase64(resourcePath)
+            if (encoded != null) """src="data:$mime;base64,$encoded"""" else match.value
+        }
+
+    private fun loadImageAsBase64(resourcePath: String): String? =
+        try {
+            AqlDocumentationProvider::class.java
+                .getResourceAsStream(resourcePath)
+                ?.use { java.util.Base64.getEncoder().encodeToString(it.readBytes()) }
+        } catch (_: Exception) { null }
 
     private fun loadDocumentForName(key: String): String =
         try {
