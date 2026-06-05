@@ -22,10 +22,13 @@ class AqlChooseByNameContributor : ChooseByNameContributor {
     override fun getNames(
         project: Project?,
         includeNonProjectItems: Boolean
-    ) = AqlUtils
-        .findNamedElements(project)
-        .mapNotNull { it.name?.takeIf { name -> name.isNotEmpty() } }
-        .toArray(EMPTY_ARRAY)
+    ): Array<String?> {
+        project ?: return EMPTY_ARRAY
+        return AqlUtils
+            .findNamedElements(project)
+            .mapNotNull { it.name?.takeIf { name -> name.isNotEmpty() } }
+            .toArray(EMPTY_ARRAY)
+    }
 
     /** Returns an array of [NavigationItem] elements matching the given name in the project. */
     override fun getItemsByName(
@@ -34,7 +37,7 @@ class AqlChooseByNameContributor : ChooseByNameContributor {
         project: Project?,
         includeNonProjectItems: Boolean
     ): Array<NavigationItem?> {
-        //TODO: Include non project items.
+        if (project == null || name == null) return EMPTY_NAV_ITEMS
         val properties = AqlUtils.findNamedElements(project, name)
         return properties.toArray(EMPTY_NAV_ITEMS)
     }

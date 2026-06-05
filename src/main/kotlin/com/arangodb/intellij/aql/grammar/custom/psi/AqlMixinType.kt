@@ -1,0 +1,12 @@
+package com.arangodb.intellij.aql.grammar.custom.psi
+
+enum class AqlMixinType {
+    FUNCTION,
+    KEYWORD,
+    ID,
+    SYSTEM_PROPERTY,
+    PROPERTY_LOOKUP,
+    VAR_PLACEHOLDER,
+    VAR_PARAMETER,
+    OBJECT_EXPRESSION
+}

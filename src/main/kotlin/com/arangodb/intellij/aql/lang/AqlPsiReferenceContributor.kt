@@ -84,7 +84,7 @@ class AqlPsiReferenceContributor(
     ): Array<PsiReference?> {
 
         // Find the type of the identifier and create the appropriate reference.
-        val reference = when (identifier.getAqlType()) {
+        val reference = when (identifier.aqlType) {
             AqlMixinType.FUNCTION -> AqlFunctionReference(identifier, rangeInElement)
             AqlMixinType.VAR_PARAMETER -> AqlPropertyParameterReference(identifier, rangeInElement)
             AqlMixinType.VAR_PLACEHOLDER -> AqlPropertyPlaceholderReference(identifier, rangeInElement)
@@ -99,7 +99,7 @@ class AqlPsiReferenceContributor(
             return arrayOf(reference)
         }
 
-        log.info("Identifier AQL Type: {}", identifier.getAqlType())
+        log.info("Identifier AQL Type: {}", identifier.aqlType)
         log.info("Element text: {}", element?.text)
         return EMPTY_PSI_REF_ARRAY
     }

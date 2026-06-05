@@ -133,7 +133,7 @@ abstract class AqlPsiReference(
 
         if (psi is AqlNamedElement) {
             val me = myElement as AqlNamedElement
-            if (psi.getAqlType() == me.getAqlType()) {
+            if (psi.aqlType == me.aqlType) {
                 val name = psi.name
 
                 if (name != null && name == me.getName()) {

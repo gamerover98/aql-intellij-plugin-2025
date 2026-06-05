@@ -1,7 +1,7 @@
 package com.arangodb.intellij.aql.syntax
 
 import com.arangodb.intellij.aql.lang.AqlLanguage
-import com.arangodb.intellij.aql.util.AqlConst
+import com.arangodb.intellij.aql.util.AQL_LANGUAGE_ID
 import com.intellij.application.options.CodeStyleAbstractConfigurable
 import com.intellij.application.options.TabbedLanguageCodeStylePanel
 import com.intellij.psi.codeStyle.CodeStyleConfigurable
@@ -26,9 +26,9 @@ class AqlCodeStyleSettingsProvider : CodeStyleSettingsProvider() {
     /**
      * Returns the display name for the AQL code style configurable.
      *
-     * @return The display name as defined in [AqlConst.AQL_LANGUAGE_ID].
+     * @return The display name as defined in [AQL_LANGUAGE_ID].
      */
-    override fun getConfigurableDisplayName() = AqlConst.AQL_LANGUAGE_ID
+    override fun getConfigurableDisplayName() = AQL_LANGUAGE_ID
 
     /**
      * Creates the code style configurable for the AQL language.
@@ -44,7 +44,7 @@ class AqlCodeStyleSettingsProvider : CodeStyleSettingsProvider() {
         object : CodeStyleAbstractConfigurable(
             settings,
             originalSettings,
-            AqlConst.AQL_LANGUAGE_ID
+            AQL_LANGUAGE_ID
         ) {
             /**
              * Creates the main panel for configuring AQL code style settings.

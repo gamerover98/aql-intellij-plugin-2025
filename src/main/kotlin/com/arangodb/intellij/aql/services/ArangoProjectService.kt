@@ -26,6 +26,10 @@ class ArangoProjectService(private val project: Project) {
         project.messageBus.connect().subscribe(topic, event)
     }
 
+    fun subscribe(topic: Topic<ActionBusEvent>, event: () -> Unit) = apply {
+        project.messageBus.connect().subscribe(topic, ActionBusEvent { event() })
+    }
+
     /**
      * Set the active ArangoDB database based on the selected node in the UI.
      * @return The [ArangoProjectService] instance for method chaining.
