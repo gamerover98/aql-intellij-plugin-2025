@@ -54,6 +54,7 @@
 
       <colorSettingsPage implementation="com.arangodb.intellij.aql.settings.AqlColorSettingsPage"/>
       <additionalTextAttributes scheme="Default" file="colors/AQLDefault.xml"/>
+      <additionalTextAttributes scheme="Darcula" file="colors/AQLDarcula.xml"/>
 
         <!-- PSI References: https://plugins.jetbrains.com/docs/intellij/psi-references.html#contributed-references -->
         <!-- NOTE: Please ignore the IDE warning because we want to use the reference contributor in all files. -->

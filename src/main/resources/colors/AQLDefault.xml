@@ -1,6 +1,6 @@
 <?xml version='1.0'?>
 <list>
-  <option name="VARIABLE_PLACE_HOLDER">
+  <option name="AQL_VARIABLE_PLACE_HOLDER">
     <value>
       <option name="FOREGROUND" value="268bd2"/>
     </value>
