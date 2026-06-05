@@ -42,23 +42,18 @@ object log {
     }
 
     @JvmStatic
-    fun warm(title: String, message: String) {
+    fun warn(title: String, message: String) {
         notify(Notification(DISPLAY_ID, DISPLAY_ID, message, NotificationType.WARNING))
     }
 
     @JvmStatic
     fun debug(message: String) {
-        logger.warn(message)
+        logger.debug(message)
     }
 
     @JvmStatic
     fun debug(message: String, e: Throwable) {
-        logger.warn(message, e)
-    }
-
-    @JvmStatic
-    fun debug(ignore: String, message: String) {
-        logger.warn(message)
+        logger.debug(message, e)
     }
 
     private fun notify(notification: Notification) {

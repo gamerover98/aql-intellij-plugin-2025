@@ -5,18 +5,8 @@ import com.arangodb.intellij.aql.util.Icons
 import com.intellij.codeInsight.lookup.LookupElementBuilder
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiElement
-import java.util.*
-
 /**
- * A reference to an AQL function in the PSI tree.
- *
- * This class extends [AqlPsiReference] to provide functionality for
- * referencing AQL functions, allowing for code completion and navigation
- * to the function definitions.
- *
- * Example usage:
- * Given the AQL code: `RETURN MY_FUNCTION()`
- * The reference will resolve `MY_FUNCTION` to its definition.
+ * PSI reference to an AQL function — enables code completion and go-to-definition for function names.
  *
  * @param element The PSI element that this reference points to.
  * @param rangeInElement The text range within the element that this reference covers.
@@ -28,10 +18,10 @@ class AqlFunctionReference(
 
     override fun getVariants(): Array<Any> {
         return findAll<AqlNamedElement>(myElement.project)
-            .filter { Objects.nonNull(it) }  // Required by LookupElementBuilder.create(...) method.
+            .filterIsInstance<AqlNamedElement>()
             .map {
                 LookupElementBuilder
-                    .create(it as AqlNamedElement)
+                    .create(it)
                     .withIcon(Icons.ICON_FUNCTION)
                     .withTypeText("function $it()")
                     .bold()

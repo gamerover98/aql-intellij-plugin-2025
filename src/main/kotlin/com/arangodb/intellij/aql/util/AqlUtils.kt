@@ -89,6 +89,7 @@ object AqlUtils {
     }
 
     @JvmStatic
+    // TODO: implement using JsonFileType (requires optional JSON plugin dependency)
     fun createDummyJsonFile(text: CharSequence, project: Project): PsiFile? = null
 
     @JvmStatic

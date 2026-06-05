@@ -76,12 +76,11 @@ class ArangoDbServer {
         }
 
     fun addDatabase(database: ArangoDbDatabase) {
-        if (_databases == null) _databases = HashSet()
-        _databases!!.add(database)
+        databases.add(database)
     }
 
     fun addQuery(query: AqlQuery) {
-        if (_queries == null) _queries = HashMap()
+        _queries = _queries ?: HashMap()
         _queries!![query.name!!] = query
     }
 

@@ -33,7 +33,6 @@ object AqlSyntaxColors {
 
     val VARIABLE          = createTextAttributesKey("AQL_VARIABLE",          createTextAttributesKey("DEFAULT_VARIABLE"))
     val ESCAPE_CHARACTERS = createTextAttributesKey("AQL_ESCAPE_CHARACTERS", createTextAttributesKey("ESCAPE_CHARACTERS"))
-    //val OBJECT_EXPRESSION = createTextAttributesKey("AQL_OBJECT_EXPRESSION", createTextAttributesKey("OBJECT_EXPRESSION"))
     //@formatter:on
 }
 

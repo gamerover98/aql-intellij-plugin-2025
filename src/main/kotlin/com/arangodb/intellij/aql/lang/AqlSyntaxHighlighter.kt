@@ -21,7 +21,7 @@ import org.slf4j.LoggerFactory
  * @property log Logger instance for diagnostic output.
  */
 class AqlSyntaxHighlighter(
-    private val log: Logger = LoggerFactory.getLogger(AqlPsiReferenceContributor::class.java)
+    private val log: Logger = LoggerFactory.getLogger(AqlSyntaxHighlighter::class.java)
 ) : SyntaxHighlighterBase() {
 
     companion object {
@@ -66,9 +66,6 @@ class AqlSyntaxHighlighter(
 
         /** Attribute set for variable identifiers. */
         val VARIABLE: Array<TextAttributesKey> = arrayOf(AqlSyntaxColors.VARIABLE)
-
-        //val ESCAPE_CHARACTERS = arrayOf(AqlSyntaxColors.ESCAPE_CHARACTERS)
-        //val OBJECT_EXPRESSION = arrayOf(AqlSyntaxColors.OBJECT_EXPRESSION)
     }
 
     /**

@@ -24,30 +24,11 @@ import com.intellij.psi.PsiWhiteSpace
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
-/**
- * Annotator for AQL syntax highlighting in the IntelliJ editor.
- *
- * This class applies custom syntax highlighting to AQL elements by analyzing PSI elements
- * and assigning appropriate text attributes for keywords, functions, variables, comments,
- * and escape characters. It helps provide visual cues to users editing AQL code,
- * improving readability and code comprehension.
- *
- * @property log Logger instance for reporting missing or unhandled AQL types.
- */
+// Semantic highlighter: applies PSI-level colors on top of the lexer-level AqlSyntaxHighlighter.
 class AqlSyntaxHighlighterAnnotator(
     private val log: Logger = LoggerFactory.getLogger(AqlSyntaxHighlighterAnnotator::class.java)
 ) : Annotator {
 
-    /**
-     * Annotates the given PSI element with syntax highlighting attributes based on its type.
-     *
-     * This method checks the type of the PSI element and applies the corresponding
-     * text attributes for syntax highlighting. It handles named AQL elements, comments,
-     * and escape characters in whitespace. Unhandled types are logged for further analysis.
-     *
-     * @param element The PSI element to annotate.
-     * @param holder The annotation holder used to apply highlighting.
-     */
     override fun annotate(element: PsiElement, holder: AnnotationHolder) {
         when (element) {
             is AqlNamedElement -> {
@@ -59,9 +40,7 @@ class AqlSyntaxHighlighterAnnotator(
                     AqlMixinType.PROPERTY_LOOKUP -> annotate(element, holder, PROPERTY_LOOKUP)
                     AqlMixinType.VAR_PARAMETER -> annotate(element, holder, PARAMETER_VARIABLE)
                     AqlMixinType.ID -> annotate(element, holder, VARIABLE)
-                    else -> {
-                        log.info("Missing aqlType {}", aqlType)
-                    }
+                    else -> log.info("Missing aqlType {}", aqlType)
                 }
             }
 
@@ -73,8 +52,7 @@ class AqlSyntaxHighlighterAnnotator(
 
                 if (idx != -1) {
                     element.textRange?.let { textRange ->
-                        val description = ESCAPE_CHARACTERS.externalName
-                        holder.newAnnotation(HighlightSeverity.WARNING, description)
+                        holder.newSilentAnnotation(HighlightSeverity.INFORMATION)
                             .range(textRange)
                             .enforcedTextAttributes(TextAttributes.ERASE_MARKER)
                             .textAttributes(ESCAPE_CHARACTERS)
@@ -83,32 +61,12 @@ class AqlSyntaxHighlighterAnnotator(
                 }
             }
         }
-
-        //TODO: understand why this code is commented out.
-        //when (element) {
-        //    is AqlPropertyLookup -> annotate(element, holder, AqlSyntaxColors.PROPERTY_LOOKUP)
-        //    is AqlKeywordFunctions -> annotate(element, holder, AqlSyntaxColors.FUNCTION)
-        //    is AqlIntegerType -> annotate(element, holder, AqlSyntaxColors.NUMBER)
-        //    is AqlParameterVariable -> annotate(element, holder, AqlSyntaxColors.PARAMETER_VARIABLE)
-        //    is AqlKeywordStatements -> annotate(element, holder, AqlSyntaxColors.KEYWORD)
-        //    is AqlVariablePlaceHolder -> annotate(element, holder, AqlSyntaxColors.VARIABLE_PLACE_HOLDER)
-        //    is AqlPropertyName -> annotate(element, holder, AqlSyntaxColors.PROPERTY_NAME)
-        //    is AqlLineComment -> annotate(element, holder, AqlSyntaxColors.LINE_COMMENT)
-        //    is AqlBlockComment -> annotate(element, holder, AqlSyntaxColors.BLOCK_COMMENT)
-        //}
     }
 }
 
-//TODO: understand why this code is commented out.
-private fun annotate(
-    element: PsiElement,
-    holder: AnnotationHolder,
-    key: TextAttributesKey
-) {
-    //holder
-    //    .newAnnotation(HighlightSeverity.WARNING, key.externalName)
-    //    .range(element)
-    //    .enforcedTextAttributes(TextAttributes.ERASE_MARKER)
-    //    .textAttributes(key)
-    //    .create();
+private fun annotate(element: PsiElement, holder: AnnotationHolder, key: TextAttributesKey) {
+    holder.newSilentAnnotation(HighlightSeverity.INFORMATION)
+        .range(element)
+        .textAttributes(key)
+        .create()
 }
