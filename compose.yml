@@ -1,27 +1,40 @@
 services:
   arangodb:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile
+    image: arangodb:latest
     environment:
       # Authentication is intentionally disabled for local development/testing only.
       # NEVER use ARANGO_NO_AUTH=1 in production.
       ARANGO_NO_AUTH: "1"
-      # The following variables are set to empty strings so the entrypoint script
-      # does not attempt to configure a password (ARANGO_NO_AUTH takes precedence).
-      ARANGO_ROOT_PASSWORD: ""
-      ARANGO_ROOT_PASSWORD_FILE: ""
-      ARANGO_RANDOM_ROOT_PASSWORD: ""
     ports:
       - "8529:8529"
     volumes:
       - arangodb_data:/var/lib/arangodb3
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8529/_api/version || exit 1"]
-      interval: 10s
+      # arangodb:latest is Alpine-based — curl is absent, wget is available.
+      # Use 127.0.0.1 explicitly: Alpine's localhost resolves to ::1 (IPv6)
+      # but arangod listens only on IPv4 (0.0.0.0:8529).
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:8529/_api/version"]
+      interval: 5s
       timeout: 5s
-      retries: 12
+      retries: 24
       start_period: 30s
+
+  arangodb-init:
+    image: arangodb:latest
+    depends_on:
+      arangodb:
+        condition: service_healthy
+    volumes:
+      - ./docker/init:/docker-init:ro
+    command:
+      - arangosh
+      - --server.endpoint
+      - tcp://arangodb:8529
+      - --server.authentication
+      - "false"
+      - --javascript.execute
+      - /docker-init/01_setup.js
+    restart: "no"
 
 volumes:
   arangodb_data:
@@ -37,4 +50,5 @@ volumes:
 # Start  : docker compose up -d
 # Stop   : docker compose down
 # Reset  : docker compose down -v   (wipes data, re-runs init on next start)
+# Logs   : docker compose logs -f arangodb-init
 # ─────────────────────────────────────────────────────────────
