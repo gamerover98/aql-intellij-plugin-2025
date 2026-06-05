@@ -62,56 +62,15 @@ class AqlGraphPanel : JPanel() {
         nodes.clear()
         edges.clear()
         positions.clear()
-        parseGraph(jsonResult)
+        val parsed = parse(jsonResult)
+        nodes.addAll(parsed.nodes)
+        edges.addAll(parsed.edges)
         if (nodes.isNotEmpty()) layoutForce()
         repaint()
     }
 
     fun clearData() {
         nodes.clear(); edges.clear(); positions.clear(); repaint()
-    }
-
-    // ─── Parsing ────────────────────────────────────────────────────────────
-
-    private fun parseGraph(json: String) {
-        val mapper = ObjectMapper()
-        val nodeMap = linkedMapOf<String, GraphNode>()
-        val edgeSet = linkedSetOf<GraphEdge>()
-
-        fun ensureNode(id: String, key: String? = null) {
-            nodeMap.getOrPut(id) { GraphNode(id, (key ?: id).substringAfter("/").take(14)) }
-        }
-
-        fun processEdge(n: JsonNode) {
-            val from = n["_from"]?.asText() ?: return
-            val to = n["_to"]?.asText() ?: return
-            ensureNode(from)
-            ensureNode(to)
-            edgeSet.add(GraphEdge(from, to))
-        }
-
-        fun processVertex(n: JsonNode) {
-            val id = n["_id"]?.asText() ?: return
-            ensureNode(id, n["_key"]?.asText())
-        }
-
-        try {
-            val root = mapper.readTree(json)
-            val items: Iterable<JsonNode> = if (root.isArray) root else listOf(root)
-            for (item in items) {
-                when {
-                    item.has("vertex") && item.has("edge") -> {
-                        item["vertex"]?.let { processVertex(it) }
-                        item["edge"]?.let { processEdge(it) }
-                    }
-                    item.has("_from") && item.has("_to") -> processEdge(item)
-                    item.has("_id") -> processVertex(item)
-                }
-            }
-        } catch (_: Exception) {}
-
-        nodes.addAll(nodeMap.values)
-        edges.addAll(edgeSet)
     }
 
     // ─── Layout ─────────────────────────────────────────────────────────────
@@ -276,5 +235,51 @@ class AqlGraphPanel : JPanel() {
         private val EDGE_COLOR  = JBColor(Color(130, 130, 130), Color(160, 160, 160))
         private val SHADOW_COLOR = JBColor(Color(0, 0, 0, 25), Color(0, 0, 0, 45))
         private val LABEL_COLOR = JBColor.WHITE
+
+        data class ParseResult(val nodes: List<GraphNode>, val edges: List<GraphEdge>)
+
+        private const val MAX_ITEMS = 500
+
+        fun parse(json: String): ParseResult {
+            val mapper = ObjectMapper()
+            val nodeMap = linkedMapOf<String, GraphNode>()
+            val edgeSet = linkedSetOf<GraphEdge>()
+
+            fun ensureNode(id: String, key: String? = null) {
+                nodeMap.getOrPut(id) { GraphNode(id, (key ?: id).substringAfter("/").take(14)) }
+            }
+
+            fun processEdge(n: JsonNode) {
+                val from = n["_from"]?.asText()?.takeIf { it.isNotEmpty() } ?: return
+                val to = n["_to"]?.asText()?.takeIf { it.isNotEmpty() } ?: return
+                ensureNode(from)
+                ensureNode(to)
+                edgeSet.add(GraphEdge(from, to))
+            }
+
+            fun processVertex(n: JsonNode) {
+                val id = n["_id"]?.asText()?.takeIf { it.isNotEmpty() } ?: return
+                ensureNode(id, n["_key"]?.asText())
+            }
+
+            try {
+                val root = mapper.readTree(json)
+                val items: Iterable<JsonNode> = if (root.isArray) root else listOf(root)
+                var count = 0
+                for (item in items) {
+                    if (++count > MAX_ITEMS) break
+                    when {
+                        item.has("vertex") && item.has("edge") -> {
+                            item["vertex"]?.let { processVertex(it) }
+                            item["edge"]?.let { processEdge(it) }
+                        }
+                        item.has("_from") && item.has("_to") -> processEdge(item)
+                        item.has("_id") -> processVertex(item)
+                    }
+                }
+            } catch (_: Exception) {}
+
+            return ParseResult(nodeMap.values.toList(), edgeSet.toList())
+        }
     }
 }

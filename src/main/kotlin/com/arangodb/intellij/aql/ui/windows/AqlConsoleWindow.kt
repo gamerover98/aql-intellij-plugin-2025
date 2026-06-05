@@ -187,13 +187,12 @@ class AqlConsoleWindow(private val project: Project, @Suppress("UNUSED_PARAMETER
             }
         }
 
-        // Auto-switch tabs
+        // Update graph and auto-switch tabs
         SwingUtilities.invokeLater {
+            graphPanel.setData(raw)
             if (raw.contains("\"_from\"") && raw.contains("\"_to\"")) {
-                graphPanel.setData(raw)
                 tabs.selectedIndex = 1
             } else {
-                graphPanel.clearData()
                 tabs.selectedIndex = 0
             }
         }
