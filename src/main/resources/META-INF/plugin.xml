@@ -69,7 +69,7 @@
                 implementationClass="com.arangodb.intellij.aql.lang.AqlPsiStructureViewFactory"/>
 
       <lang.findUsagesProvider language="AQL" implementationClass="com.arangodb.intellij.aql.lang.AqlFindUsagesProvider"/>
-      <lang.documentationProvider language="AQL" implementationClass="com.arangodb.intellij.aql.lang.AqlDocumentationProvider"/>
+      <platform.backend.documentation.psiTargetProvider implementationClass="com.arangodb.intellij.aql.lang.AqlDocumentationTargetProvider"/>
 
         <!-- Syntax Highlighter:
              https://plugins.jetbrains.com/docs/intellij/syntax-highlighter-and-color-settings-page.html#register-the-syntax-highlighter-factory -->
