@@ -22,6 +22,7 @@ import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import javax.swing.JPanel
 import javax.swing.BorderFactory
+import javax.swing.SwingUtilities
 
 /**
  * Tool window for managing ArangoDB servers and databases within the IDE.
@@ -96,7 +97,7 @@ class ServerToolWindow(private val project: Project) : Disposable {
 
         // Subscribe to events.
         service
-            .subscribe(ActionBusEvent.AQL_SYSTEM_REFRESH_SCHEME) { fillTree() }
+            .subscribe(ActionBusEvent.AQL_SYSTEM_REFRESH_SCHEME) { SwingUtilities.invokeLater { fillTree() } }
             .subscribe(ActionBusEvent.AQL_SYSTEM_ACTIVE_DATABASE_SET) {
                 val selectedNodes =
                     schemaTree

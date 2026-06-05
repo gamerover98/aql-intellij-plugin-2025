@@ -41,6 +41,7 @@ class AqlConsoleWindow(private val project: Project, @Suppress("UNUSED_PARAMETER
 
     // ─── Toolbar components ─────────────────────────────────────────────────
     private val dbSelector = JComboBox<String>()
+    private var isUpdatingDbSelector = false
 
     // ─── Result panels ──────────────────────────────────────────────────────
     private val jsonPanel = JsonPanel(project)
@@ -224,6 +225,7 @@ class AqlConsoleWindow(private val project: Project, @Suppress("UNUSED_PARAMETER
 
     private fun wireDbSelector() {
         dbSelector.addActionListener {
+            if (isUpdatingDbSelector) return@addActionListener
             val db = dbSelector.selectedItem as? String ?: return@addActionListener
             val currentDb = project.getService(DataWindowState::class.java).state.selectedDatabase?.name
             if (currentDb != db) {
@@ -242,13 +244,18 @@ class AqlConsoleWindow(private val project: Project, @Suppress("UNUSED_PARAMETER
         val selected = state.selectedDatabase?.name ?: state.selectedDatabaseName
 
         SwingUtilities.invokeLater {
-            val current = dbSelector.selectedItem as? String
-            dbSelector.removeAllItems()
-            databases.forEach { dbSelector.addItem(it) }
-            when {
-                selected != null && databases.contains(selected) -> dbSelector.selectedItem = selected
-                current != null && databases.contains(current) -> dbSelector.selectedItem = current
-                databases.isNotEmpty() -> dbSelector.selectedIndex = 0
+            isUpdatingDbSelector = true
+            try {
+                val current = dbSelector.selectedItem as? String
+                dbSelector.removeAllItems()
+                databases.forEach { dbSelector.addItem(it) }
+                when {
+                    selected != null && databases.contains(selected) -> dbSelector.selectedItem = selected
+                    current != null && databases.contains(current) -> dbSelector.selectedItem = current
+                    databases.isNotEmpty() -> dbSelector.selectedIndex = 0
+                }
+            } finally {
+                isUpdatingDbSelector = false
             }
         }
     }
