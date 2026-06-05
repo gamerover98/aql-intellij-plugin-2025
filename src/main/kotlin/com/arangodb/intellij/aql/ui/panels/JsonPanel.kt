@@ -31,9 +31,9 @@ class JsonPanel(project: Project) : ConsoleViewImpl(project, true), Disposable, 
         val raw = data.get(ActionEventData.KEY_RESULT) ?: return
         project.getService(AqlResultService::class.java).lastResult = raw
         val pretty = try {
-            mapper.writeValueAsString(mapper.readTree(raw))
+            mapper.writeValueAsString(mapper.readTree(raw)).replace("\r\n", "\n").replace("\r", "\n")
         } catch (_: Exception) {
-            raw
+            raw.replace("\r\n", "\n").replace("\r", "\n")
         }
         ApplicationManager.getApplication().invokeLater {
             WriteAction.run<Exception> {
