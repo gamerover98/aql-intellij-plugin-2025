@@ -3,101 +3,265 @@ package com.arangodb.intellij.aql.ui.windows
 import com.arangodb.intellij.aql.actions.ActionBusEvent
 import com.arangodb.intellij.aql.actions.ActionEventData
 import com.arangodb.intellij.aql.actions.AqlDataService
-import com.arangodb.intellij.aql.ui.actions.CollapseAllAction
-import com.arangodb.intellij.aql.ui.actions.DeleteQueryAction
-import com.arangodb.intellij.aql.ui.actions.EditQueryAction
-import com.arangodb.intellij.aql.ui.actions.ExecuteQueryAction
-import com.arangodb.intellij.aql.ui.actions.ExpandAllAction
-import com.arangodb.intellij.aql.ui.actions.ExplainQueryAction
+import com.arangodb.intellij.aql.lang.AqlLanguage
+import com.arangodb.intellij.aql.model.AqlQuery
+import com.arangodb.intellij.aql.model.ArangoDbDatabase
+import com.arangodb.intellij.aql.ui.DataWindowState
+import com.arangodb.intellij.aql.ui.panels.AqlGraphPanel
 import com.arangodb.intellij.aql.ui.panels.JsonPanel
-import com.arangodb.intellij.aql.ui.renderers.AqlQueryRenderer
+import com.intellij.icons.AllIcons
 import com.intellij.openapi.Disposable
-import com.intellij.openapi.actionSystem.ActionGroup
-import com.intellij.openapi.actionSystem.ActionManager
-import com.intellij.openapi.actionSystem.ActionToolbarPosition
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.ToolWindow
-import com.intellij.ui.ToolbarDecorator
-import com.intellij.ui.border.CustomLineBorder
+import com.intellij.ui.LanguageTextField
+import com.intellij.ui.JBSplitter
+import com.intellij.ui.components.JBLabel
+import com.intellij.ui.components.JBList
+import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTabbedPane
-import com.intellij.ui.treeStructure.Tree
 import com.intellij.util.ui.JBUI
-import javax.swing.BorderFactory
-import javax.swing.JComponent
-import javax.swing.JPanel
-import javax.swing.tree.DefaultTreeModel
+import java.awt.BorderLayout
+import java.awt.FlowLayout
+import java.awt.event.KeyEvent
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import javax.swing.*
+import javax.swing.DefaultListModel
 
-class AqlConsoleWindow(private val project: Project, toolWindow: ToolWindow) : Disposable {
+class AqlConsoleWindow(private val project: Project, @Suppress("UNUSED_PARAMETER") toolWindow: ToolWindow) : Disposable {
 
     companion object {
         const val WINDOW_ID = "ArangoDB Console"
+        private val TS_FMT = DateTimeFormatter.ofPattern("HH:mm:ss")
     }
 
-    @JvmField var panel: JPanel? = null
-    @JvmField var tabContainer: JBTabbedPane? = null
-    @JvmField var jsonResults: JPanel? = null
-    @JvmField var jsonTabPanel: JPanel? = null
-    @JvmField var queryHistory: JPanel? = null
-    @JvmField var graphPanel: JPanel? = null
-    @JvmField var queryTree: Tree? = null
+    // ─── Editor area ────────────────────────────────────────────────────────
+    private val editorField = LanguageTextField(AqlLanguage, project, "", false)
 
-    private var jsonPanel: JsonPanel? = null
-    private var toolbarDecorator: ToolbarDecorator? = null
+    // ─── Toolbar components ─────────────────────────────────────────────────
+    private val dbSelector = JComboBox<String>()
+
+    // ─── Result panels ──────────────────────────────────────────────────────
+    private val jsonPanel = JsonPanel(project)
+    private val graphPanel = AqlGraphPanel()
+
+    // ─── History ────────────────────────────────────────────────────────────
+    private val historyModel = DefaultListModel<HistoryEntry>()
+    private val historyList = JBList(historyModel)
+
+    // ─── Root component ─────────────────────────────────────────────────────
+    private val tabs = JBTabbedPane()
+    private val root: JComponent
+
+    private data class HistoryEntry(val timestamp: String, val query: String) {
+        override fun toString() = "[$timestamp] ${query.lines().first().take(60)}"
+    }
 
     init {
-        jsonResults?.setBorder(JBUI.Borders.empty())
-        jsonPanel = JsonPanel(project)
-        jsonResults?.add(jsonPanel, java.awt.BorderLayout.CENTER)
+        root = buildUI()
+        wireDbSelector()
+        wireEvents()
+        populateDatabaseSelector()
+    }
 
-        project.messageBus.connect().subscribe(ActionBusEvent.AQL_QUERY_RESULT, ActionBusEvent { data -> processQuery(data) })
-        project.messageBus.connect().subscribe(ActionBusEvent.AQL_SYSTEM_EMPTY_LOG, ActionBusEvent { _ -> emptyLog() })
-        project.messageBus.connect().subscribe(ActionBusEvent.AQL_QUERY_TREE_CHANGE, ActionBusEvent { _ -> fillTree() })
+    // ─── UI construction ────────────────────────────────────────────────────
 
-        val consoleActionGroup = ActionManager.getInstance().getAction(ActionBusEvent.ACTION_CONSOLE) as? ActionGroup
-        if (consoleActionGroup != null) {
-            val consoleToolbar = ActionManager.getInstance().createActionToolbar(WINDOW_ID, consoleActionGroup, false)
-            jsonTabPanel?.add(consoleToolbar.component, java.awt.BorderLayout.NORTH)
+    private fun buildUI(): JComponent {
+        // Toolbar
+        val toolbar = buildToolbar()
+
+        // Editor wrapper
+        val editorWrapper = JPanel(BorderLayout())
+        editorWrapper.add(toolbar, BorderLayout.NORTH)
+        editorWrapper.add(editorField, BorderLayout.CENTER)
+        editorWrapper.border = JBUI.Borders.empty()
+
+        // Result tabs
+        tabs.addTab("JSON Results", AllIcons.FileTypes.Json, JBScrollPane(jsonPanel.consoleComponent))
+        tabs.addTab("Graph View", AllIcons.Nodes.Related, graphPanel)
+        tabs.addTab("Query History", AllIcons.Vcs.History, buildHistoryPanel())
+
+        // Splitter: editor top (35%), results bottom (65%)
+        val splitter = JBSplitter(true, 0.35f)
+        splitter.firstComponent = editorWrapper
+        splitter.secondComponent = tabs
+        splitter.border = JBUI.Borders.empty()
+
+        val outer = JPanel(BorderLayout())
+        outer.add(splitter, BorderLayout.CENTER)
+        return outer
+    }
+
+    private fun buildToolbar(): JPanel {
+        val panel = JPanel(FlowLayout(FlowLayout.LEFT, 4, 2))
+        panel.border = JBUI.Borders.customLine(JBUI.CurrentTheme.ToolWindow.borderColor(), 0, 0, 1, 0)
+
+        val dbLabel = JBLabel("Database:")
+        dbSelector.preferredSize = JBUI.size(160, 24)
+
+        val executeBtn = JButton("Execute", AllIcons.Actions.Execute).apply {
+            toolTipText = "Execute query (Ctrl+Enter)"
+            addActionListener { executeQuery() }
         }
-        jsonTabPanel?.setBorder(CustomLineBorder(0, 0, 0, 1))
-        jsonTabPanel?.validate()
+        val explainBtn = JButton("Explain", AllIcons.Actions.Preview).apply {
+            toolTipText = "Explain query"
+            addActionListener { explainQuery() }
+        }
+        val clearBtn = JButton("Clear", AllIcons.Actions.GC).apply {
+            toolTipText = "Clear editor and results"
+            addActionListener { clearAll() }
+        }
 
-        queryTree?.let { tree ->
-            toolbarDecorator = ToolbarDecorator.createDecorator(tree).apply {
-                setPanelBorder(BorderFactory.createEmptyBorder())
-                setToolbarPosition(ActionToolbarPosition.TOP)
-                addExtraAction(ExpandAllAction(tree))
-                addExtraAction(CollapseAllAction(tree))
-                addExtraAction(DeleteQueryAction(project, tree))
-                addExtraAction(EditQueryAction(project, tree))
-                addExtraAction(ExplainQueryAction(project, tree))
-                addExtraAction(ExecuteQueryAction(project, tree))
+        panel.add(dbLabel)
+        panel.add(dbSelector)
+        panel.add(JSeparator(SwingConstants.VERTICAL).apply { preferredSize = JBUI.size(1, 20) })
+        panel.add(executeBtn)
+        panel.add(explainBtn)
+        panel.add(clearBtn)
+
+        // Ctrl+Enter in editor triggers execute
+        editorField.addSettingsProvider { editor ->
+            editor.contentComponent.getInputMap(JComponent.WHEN_FOCUSED).put(
+                KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, KeyEvent.CTRL_DOWN_MASK), "aql.execute"
+            )
+            editor.contentComponent.actionMap.put("aql.execute", object : AbstractAction() {
+                override fun actionPerformed(e: java.awt.event.ActionEvent) = executeQuery()
+            })
+        }
+
+        return panel
+    }
+
+    private fun buildHistoryPanel(): JComponent {
+        historyList.selectionMode = ListSelectionModel.SINGLE_SELECTION
+        historyList.addListSelectionListener { e ->
+            if (e.valueIsAdjusting) return@addListSelectionListener
+            val entry = historyList.selectedValue ?: return@addListSelectionListener
+            editorField.text = entry.query
+        }
+        val scroll = JBScrollPane(historyList)
+
+        val clearHistoryBtn = JButton("Clear History").apply {
+            addActionListener { historyModel.clear() }
+        }
+        val panel = JPanel(BorderLayout())
+        panel.add(scroll, BorderLayout.CENTER)
+        panel.add(clearHistoryBtn, BorderLayout.SOUTH)
+        return panel
+    }
+
+    // ─── Event wiring ────────────────────────────────────────────────────────
+
+    private fun wireEvents() {
+        val bus = project.messageBus.connect(this)
+
+        bus.subscribe(ActionBusEvent.AQL_QUERY_RESULT, ActionBusEvent { data ->
+            processResult(data)
+        })
+        bus.subscribe(ActionBusEvent.AQL_SYSTEM_EMPTY_LOG, ActionBusEvent { _ ->
+            jsonPanel.onClean(project)
+            graphPanel.clearData()
+        })
+        bus.subscribe(ActionBusEvent.AQL_SYSTEM_REFRESH_SCHEME, ActionBusEvent { _ ->
+            populateDatabaseSelector()
+        })
+        bus.subscribe(ActionBusEvent.AQL_SYSTEM_ACTIVE_DATABASE_SET, ActionBusEvent { _ ->
+            populateDatabaseSelector()
+        })
+    }
+
+    private fun processResult(data: ActionEventData) {
+        jsonPanel.onMessage(data, project)
+
+        val raw = data.get(ActionEventData.KEY_RESULT) ?: return
+        val query = data.get(ActionEventData.KEY_QUERY) ?: ""
+
+        // Record in history
+        val ts = LocalDateTime.now().format(TS_FMT)
+        if (query.isNotBlank()) {
+            SwingUtilities.invokeLater {
+                historyModel.insertElementAt(HistoryEntry(ts, query), 0)
+                if (historyModel.size > 200) historyModel.removeElementAt(historyModel.size - 1)
             }
-            queryHistory?.add(toolbarDecorator!!.createPanel())
         }
 
-        fillTree()
+        // Auto-switch tabs
+        SwingUtilities.invokeLater {
+            if (raw.contains("\"_from\"") && raw.contains("\"_to\"")) {
+                graphPanel.setData(raw)
+                tabs.selectedIndex = 1
+            } else {
+                graphPanel.clearData()
+                tabs.selectedIndex = 0
+            }
+        }
     }
 
-    private fun fillTree() {
-        val tree = queryTree ?: return
-        tree.cellRenderer = AqlQueryRenderer()
-        tree.isRootVisible = true
-        tree.showsRootHandles = false
-        val treeModel: DefaultTreeModel = AqlDataService.with(project).populateQueryTree()
-        tree.model = treeModel
+    // ─── Actions ─────────────────────────────────────────────────────────────
+
+    private fun executeQuery() {
+        val query = editorField.text.trim().ifEmpty { return }
+        ApplicationManager.getApplication().executeOnPooledThread {
+            AqlDataService.with(project).executeQuery(query)
+        }
     }
 
-    private fun emptyLog() {
-        jsonPanel?.onClean(project)
+    private fun explainQuery() {
+        val query = editorField.text.trim().ifEmpty { return }
+        ApplicationManager.getApplication().executeOnPooledThread {
+            AqlDataService.with(project).explainQuery(query)
+        }
     }
 
-    private fun processQuery(data: ActionEventData) {
-        jsonPanel?.onMessage(data, project)
+    private fun clearAll() {
+        editorField.text = ""
+        jsonPanel.onClean(project)
+        graphPanel.clearData()
     }
 
-    fun getContent(): JComponent = panel!!
+    // ─── Database selector ───────────────────────────────────────────────────
+
+    private fun wireDbSelector() {
+        dbSelector.addActionListener {
+            val db = dbSelector.selectedItem as? String ?: return@addActionListener
+            val currentDb = project.getService(DataWindowState::class.java).state.selectedDatabase?.name
+            if (currentDb != db) {
+                ApplicationManager.getApplication().executeOnPooledThread {
+                    AqlDataService.with(project).setActiveDatabase(
+                        com.arangodb.intellij.aql.ui.renderers.AqlNodeModel(db, db, com.arangodb.intellij.aql.ui.renderers.AqlNodeModel.Type.DATABASE)
+                    )
+                }
+            }
+        }
+    }
+
+    private fun populateDatabaseSelector() {
+        val state = project.getService(DataWindowState::class.java).state
+        val databases = state.databases.map { it.name ?: "" }.filter { it.isNotEmpty() }.sorted()
+        val selected = state.selectedDatabase?.name ?: state.selectedDatabaseName
+
+        SwingUtilities.invokeLater {
+            val current = dbSelector.selectedItem as? String
+            dbSelector.removeAllItems()
+            databases.forEach { dbSelector.addItem(it) }
+            when {
+                selected != null && databases.contains(selected) -> dbSelector.selectedItem = selected
+                current != null && databases.contains(current) -> dbSelector.selectedItem = current
+                databases.isNotEmpty() -> dbSelector.selectedIndex = 0
+            }
+        }
+    }
+
+    // ─── Public API ──────────────────────────────────────────────────────────
+
+    fun getContent(): JComponent = root
+
+    fun setQueryText(query: String) {
+        editorField.text = query
+    }
 
     override fun dispose() {
-        jsonPanel?.dispose()
+        jsonPanel.dispose()
     }
 }

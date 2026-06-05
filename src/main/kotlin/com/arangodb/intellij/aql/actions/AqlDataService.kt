@@ -90,8 +90,12 @@ class AqlDataService private constructor(private val project: Project) {
         try {
             val activeDatabase = service.getActiveDatabase(state, project)
             val result = if (type == QueryType.QUERY) {
-                val cursor = activeDatabase.query(query, bindVars, String::class.java)
-                cursor.asListRemaining().joinToString("")
+                val items = activeDatabase.query(query, bindVars, String::class.java).asListRemaining()
+                when {
+                    items.isEmpty() -> "[]"
+                    items.size == 1 -> items[0]
+                    else -> "[${items.joinToString(",")}]"
+                }
             } else {
                 val options = AqlQueryExplainOptions()
                 val explainEntity = activeDatabase.explainQuery(query, bindVars, options)
