@@ -1,5 +1,7 @@
 package com.arangodb.intellij.aql.lang
 
+import com.arangodb.intellij.aql.db.AqlDatabaseService
+import com.arangodb.intellij.aql.grammar.custom.psi.AqlMixinType
 import com.arangodb.intellij.aql.grammar.custom.psi.AqlNamedElement
 import com.arangodb.intellij.aql.grammar.generated.psi.AqlKeywordStatements
 import com.arangodb.intellij.aql.grammar.generated.psi.AqlNamedFunctions
@@ -38,26 +40,53 @@ class AqlDocumentationProvider : AbstractDocumentationProvider() {
                 }
             })
 
-    override fun getQuickNavigateInfo(element: PsiElement, originalElement: PsiElement): String? {
-        if (element is AqlKeywordStatements) {
-            return element.node.chars.toString()
+    override fun getQuickNavigateInfo(element: PsiElement?, originalElement: PsiElement?): String? {
+        val aqlElement = resolveAqlElement(element ?: originalElement ?: return null) ?: return null
+        return when (aqlElement) {
+            is AqlKeywordStatements -> aqlElement.node.chars.toString()
+            else -> aqlElement.name
         }
-        return null
     }
 
-    override fun generateDoc(element: PsiElement, originalElement: PsiElement?): String {
-        if (element is AqlPropertyName) {
-            return "No documentation for '${element.text}' found."
+    override fun generateDoc(element: PsiElement?, originalElement: PsiElement?): String? {
+        val target = element ?: originalElement ?: return null
+        val aqlElement = resolveAqlElement(target) ?: return null
+
+        return when {
+            aqlElement is AqlPropertyName -> null
+            aqlElement is AqlKeywordStatements ->
+                loadDocumentForName(aqlElement.node.chars.toString().uppercase())
+            aqlElement is AqlNamedFunctions ->
+                loadDocumentForName(aqlElement.text.uppercase())
+            aqlElement.aqlType == AqlMixinType.ID ->
+                docForDatabaseObject(aqlElement)
+            else ->
+                aqlElement.name?.let { loadDocumentForName(it.uppercase()) }
         }
-        if (element is AqlNamedElement) {
-            val name: String? = when (element) {
-                is AqlKeywordStatements -> element.node.chars.toString()
-                is AqlNamedFunctions -> element.text
-                else -> element.name
-            }
-            if (name != null) return loadDocumentForName(name.uppercase())
+    }
+
+    // Resolves a PSI element or its parent to an AqlNamedElement.
+    // IntelliJ may pass a raw leaf token; walk up one level to find the named wrapper.
+    private fun resolveAqlElement(element: PsiElement): AqlNamedElement? = when {
+        element is AqlNamedElement -> element
+        element.parent is AqlNamedElement -> element.parent as AqlNamedElement
+        else -> null
+    }
+
+    // Checks whether the identifier matches a cached collection/graph/view and returns a short HTML summary.
+    // Returns null if the DB cache is empty or the name is not a known DB object.
+    private fun docForDatabaseObject(element: AqlNamedElement): String? {
+        val name = element.text
+        val service = element.project.getService(AqlDatabaseService::class.java)
+        return when {
+            service.getCollections().any { it.lookupString == name } ->
+                "<b>$name</b><br/>ArangoDB collection"
+            service.getGraphs().any { it.lookupString == name } ->
+                "<b>$name</b><br/>ArangoDB graph"
+            service.getSearchViews().any { it.lookupString == name } ->
+                "<b>$name</b><br/>ArangoDB view"
+            else -> null
         }
-        return "<no documentation>"
     }
 
     private fun loadDocumentForName(key: String): String =

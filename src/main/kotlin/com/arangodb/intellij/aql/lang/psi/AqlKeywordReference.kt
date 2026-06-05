@@ -5,7 +5,6 @@ import com.arangodb.intellij.aql.util.Icons
 import com.intellij.codeInsight.lookup.LookupElementBuilder
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiElement
-import java.util.Objects
 
 /**
  * A reference to an AQL keyword in the PSI tree.
@@ -27,10 +26,10 @@ class AqlKeywordReference(
 
     override fun getVariants(): Array<Any> {
         return findAll<AqlNamedElement>(myElement.project)
-            .filter { Objects.nonNull(it) }  // Required by LookupElementBuilder.create(...) method.
+            .filterIsInstance<AqlNamedElement>()
             .map {
                 LookupElementBuilder
-                    .create(it as AqlNamedElement)
+                    .create(it)
                     .withIcon(Icons.ICON_ARANGO_SMALL)
                     .withTypeText("keyword $it()")
                     .bold()
