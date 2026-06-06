@@ -1,5 +1,6 @@
 package com.arangodb.intellij.aql.ui.panels
 
+import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.application.ApplicationManager
@@ -32,11 +33,15 @@ import javax.swing.JPanel
 import javax.swing.JPopupMenu
 import javax.swing.JSeparator
 import javax.swing.JTable
+import javax.swing.JTextField
 import javax.swing.KeyStroke
 import javax.swing.ListSelectionModel
+import javax.swing.RowFilter
 import javax.swing.SwingConstants
 import javax.swing.SwingUtilities
 import javax.swing.Timer
+import javax.swing.event.DocumentEvent
+import javax.swing.event.DocumentListener
 import javax.swing.table.DefaultTableCellRenderer
 import javax.swing.table.DefaultTableModel
 import javax.swing.table.TableRowSorter
@@ -45,18 +50,28 @@ import javax.swing.table.TableRowSorter
  * Tabular view for AQL query results.
  *
  * Features:
- *  - `_class` always first column: shows only the simple class name; tooltip and the
- *    status bar below the table show the full FQN when the cell is selected.
- *    Double-click navigates to the matching .java/.kt source file.
+ *  - Automatic row limit: only the first [PAGE_SIZE] rows are shown by default;
+ *    a "Show All" button in the status bar reveals the full result set, and a
+ *    "Show [PAGE_SIZE]" button returns to the paged view.
+ *  - Live filter field: instantly narrows visible rows by any case-insensitive
+ *    text match across all columns (regex-escaped, so plain text is safe).
+ *  - `_class` always first column: shows only the simple class name; the tooltip
+ *    and the status bar below the table show the full FQN when the cell is
+ *    selected. Double-click navigates to the matching .java/.kt source file.
  *  - Metadata fields (_class, _id, _key, _rev, _from, _to) pinned left; other
  *    fields follow alphabetically.
- *  - Columns auto-sized to content; last column stretches to fill remaining space.
+ *  - Columns auto-sized to content (sampled from the first 30 rows).
  *  - Single-cell selection; Ctrl+C copies the cell value.
  *  - Toolbar: Copy Row | Copy JSON | Copy as String.
  *  - Right-click context menu: Copy Cell, Copy Row as JSON, Copy All as JSON,
- *    Copy All as String, (Navigate to Class for _class cells).
+ *    Copy All as String, Navigate to Class.
  */
 class ResultTablePanel(private val project: Project) : JPanel(BorderLayout()) {
+
+    companion object {
+        /** Maximum rows shown before the user opts in to "Show All". */
+        private const val PAGE_SIZE = 500
+    }
 
     /** Pinned metadata columns — _class always first. */
     private val META_KEYS = listOf("_class", "_id", "_key", "_rev", "_from", "_to")
@@ -64,25 +79,35 @@ class ResultTablePanel(private val project: Project) : JPanel(BorderLayout()) {
     private val mapper = ObjectMapper()
     private var lastRawJson = ""
 
-    // ─── Toolbar buttons (kept as fields for copy feedback) ───────────────────
+    // ─── Pagination state ─────────────────────────────────────────────────────
+    private var allItems: List<JsonNode> = emptyList()
+    private var columnNames: List<String> = emptyList()
+    private var showAll = false
+
+    // ─── Toolbar buttons (fields needed for copy feedback) ────────────────────
     private lateinit var copyRowBtn: JButton
     private lateinit var copyJsonBtn: JButton
     private lateinit var copyStringBtn: JButton
+    private var buttonFeedbackTimer: Timer? = null
 
-    /** Active feedback timer — cancelled if another copy fires before it expires. */
-    private var feedbackTimer: Timer? = null
+    // ─── Search field ─────────────────────────────────────────────────────────
+    private val searchField = JTextField().apply {
+        preferredSize = JBUI.size(200, 24)
+        toolTipText = "Filter rows (case-insensitive, plain text)"
+    }
 
-    // ─── Model & table ────────────────────────────────────────────────────────
-
+    // ─── Model & sorter ───────────────────────────────────────────────────────
     private val tableModel = object : DefaultTableModel() {
         override fun isCellEditable(row: Int, column: Int) = false
         override fun getColumnClass(col: Int) = String::class.java
     }
+    private val rowSorter = TableRowSorter(tableModel)
+
+    // ─── Table ────────────────────────────────────────────────────────────────
 
     /**
-     * Table that:
-     *  - tracks the viewport width (fills horizontally) when columns fit;
-     *  - shows a per-cell tooltip with the full FQN for _class cells.
+     * Custom table that shows the full FQN as a tooltip for `_class` cells
+     * (the cell itself only displays the short class name).
      */
     private val table = object : JBTable(tableModel) {
         override fun getToolTipText(e: MouseEvent): String? {
@@ -98,32 +123,43 @@ class ResultTablePanel(private val project: Project) : JPanel(BorderLayout()) {
         }
     }
 
-    // ─── Status label (shows full _class FQN on cell selection) ──────────────
+    // ─── Bottom bar widgets ───────────────────────────────────────────────────
 
+    /** Shows full _class FQN on selection; flashes "✓ Copied" on context-menu copy. */
     private val statusLabel = JLabel(" ").apply {
-        border = JBUI.Borders.empty(2, 8)
+        border = JBUI.Borders.empty(1, 8)
         foreground = JBColor.GRAY
         font = font.deriveFont(Font.ITALIC, (font.size - 1).toFloat())
         horizontalAlignment = SwingConstants.LEFT
     }
+    private var statusFeedbackTimer: Timer? = null
+
+    /** Shows "Showing X of N rows" / "Showing all N rows". */
+    private val paginationLabel = JLabel(" ").apply {
+        border = JBUI.Borders.empty(1, 8)
+        foreground = JBColor.GRAY
+        font = font.deriveFont((font.size - 1).toFloat())
+    }
+
+    private lateinit var showAllBtn: JButton
+    private lateinit var show500Btn: JButton
 
     // ─── Init ─────────────────────────────────────────────────────────────────
 
     init {
         background = JBColor.background()
 
-        // Table settings
         table.autoResizeMode = JTable.AUTO_RESIZE_LAST_COLUMN
         table.fillsViewportHeight = true
         table.rowHeight = JBUI.scale(22)
         table.setDefaultRenderer(String::class.java, ClassAwareCellRenderer())
-        table.rowSorter = TableRowSorter(tableModel)
+        table.rowSorter = rowSorter
 
         // Single-cell selection
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION)
         table.cellSelectionEnabled = true
 
-        // Ctrl+C → copy cell value
+        // Ctrl+C → copy selected cell value
         table.actionMap.put("copy", object : AbstractAction() {
             override fun actionPerformed(e: java.awt.event.ActionEvent) = copySelectedCell()
         })
@@ -131,15 +167,13 @@ class ResultTablePanel(private val project: Project) : JPanel(BorderLayout()) {
             KeyStroke.getKeyStroke(KeyEvent.VK_C, InputEvent.CTRL_DOWN_MASK), "copy"
         )
 
-        // Right-click: pre-select cell, then show context menu
+        // Mouse: right-click preselect, double-click navigate, cursor update
         table.addMouseListener(object : MouseAdapter() {
             override fun mousePressed(e: MouseEvent) {
                 if (SwingUtilities.isRightMouseButton(e)) preselectCell(e)
             }
             override fun mouseClicked(e: MouseEvent) {
-                if (SwingUtilities.isLeftMouseButton(e) && e.clickCount == 2) {
-                    onDoubleClick(e)
-                }
+                if (SwingUtilities.isLeftMouseButton(e) && e.clickCount == 2) onDoubleClick(e)
             }
             override fun mouseMoved(e: MouseEvent) = updateCursor(e)
         })
@@ -149,23 +183,33 @@ class ResultTablePanel(private val project: Project) : JPanel(BorderLayout()) {
 
         table.componentPopupMenu = buildContextMenu()
 
-        // Status label: update when selection changes
+        // Status label: update on cell selection change
         table.selectionModel.addListSelectionListener { updateStatusLabel() }
         table.columnModel.selectionModel.addListSelectionListener { updateStatusLabel() }
 
-        // Layout
+        // Search field → live RowFilter
+        searchField.document.addDocumentListener(object : DocumentListener {
+            override fun insertUpdate(e: DocumentEvent) = applyFilter()
+            override fun removeUpdate(e: DocumentEvent) = applyFilter()
+            override fun changedUpdate(e: DocumentEvent) = applyFilter()
+        })
+
         add(buildToolbar(), BorderLayout.NORTH)
         add(JBScrollPane(table), BorderLayout.CENTER)
-        add(statusLabel, BorderLayout.SOUTH)
+        add(buildBottomBar(), BorderLayout.SOUTH)
     }
 
     // ─── Public API ───────────────────────────────────────────────────────────
 
     fun setData(json: String) {
         lastRawJson = json
+        allItems = emptyList()
+        columnNames = emptyList()
+        showAll = false
         tableModel.rowCount = 0
         tableModel.columnCount = 0
-        if (json.isBlank()) { updateStatusLabel(); return }
+
+        if (json.isBlank()) { updatePaginationLabel(); updateStatusLabel(); return }
 
         try {
             val root = mapper.readTree(json)
@@ -176,75 +220,193 @@ class ResultTablePanel(private val project: Project) : JPanel(BorderLayout()) {
             }
             if (items.isEmpty()) return
 
-            // Ordered columns: meta keys first (_class always first), then others α-sorted
+            // Build ordered columns: meta keys first (_class always first), rest α-sorted
             val allKeys = linkedSetOf<String>()
             items.forEach { item -> if (item.isObject) item.fieldNames().forEach { allKeys.add(it) } }
-            val columns = (META_KEYS.filter { it in allKeys } +
-                           allKeys.filterNot { it in META_KEYS }.sorted())
-                .toTypedArray<Any>()
+            columnNames = META_KEYS.filter { it in allKeys } + allKeys.filterNot { it in META_KEYS }.sorted()
+            allItems = items
 
-            tableModel.setColumnIdentifiers(columns)
-
-            items.forEach { item ->
-                val row: Array<Any?> = columns.map { col ->
-                    if (!item.isObject) return@map item.toString()
-                    val node = item.get(col as String)
-                    when {
-                        node == null || node.isNull -> null
-                        node.isTextual             -> node.asText()
-                        else                       -> node.toString()
-                    }
-                }.toTypedArray()
-                tableModel.addRow(row)
-            }
-
-            // Auto-size columns by content (sample up to 30 rows)
-            val headerFm = table.tableHeader.getFontMetrics(table.tableHeader.font)
-            val cellFm   = table.getFontMetrics(table.font)
-            for (i in columns.indices) {
-                val col     = table.columnModel.getColumn(i)
-                val colName = columns[i].toString()
-                // For _class: measure short name (that's what we display)
-                val displayName = if (colName == "_class") colName else colName
-                val headerW = headerFm.stringWidth(displayName) + JBUI.scale(24)
-                val contentW = (0 until minOf(tableModel.rowCount, 30))
-                    .mapNotNull { r -> tableModel.getValueAt(r, i) as? String }
-                    .maxOfOrNull { s ->
-                        val display = if (colName == "_class") s.substringAfterLast('.') else s
-                        cellFm.stringWidth(display) + JBUI.scale(20)
-                    } ?: JBUI.scale(60)
-                col.minWidth       = JBUI.scale(40)
-                col.preferredWidth = maxOf(headerW, contentW).coerceAtMost(JBUI.scale(280))
-            }
+            tableModel.setColumnIdentifiers(columnNames.toTypedArray<Any>())
+            repopulateRows()
+            autoSizeColumns()
         } catch (_: Exception) { /* malformed JSON — leave table empty */ }
     }
 
     fun clear() {
         lastRawJson = ""
+        allItems = emptyList()
+        columnNames = emptyList()
+        showAll = false
         tableModel.rowCount = 0
         tableModel.columnCount = 0
+        searchField.text = ""
         statusLabel.text = " "
+        statusLabel.foreground = JBColor.GRAY
+        paginationLabel.text = " "
+        showAllBtn.isVisible = false
+        show500Btn.isVisible = false
+    }
+
+    // ─── Pagination ───────────────────────────────────────────────────────────
+
+    /**
+     * Clears and repopulates the table model from [allItems], respecting the
+     * current [showAll] flag and the [PAGE_SIZE] limit.
+     */
+    private fun repopulateRows() {
+        tableModel.rowCount = 0
+        val items = if (showAll || allItems.size <= PAGE_SIZE) allItems else allItems.take(PAGE_SIZE)
+        items.forEach { item ->
+            val row: Array<Any?> = columnNames.map { col ->
+                if (!item.isObject) return@map item.toString()
+                val node = item.get(col)
+                when {
+                    node == null || node.isNull -> null
+                    node.isTextual             -> node.asText()
+                    else                       -> node.toString()
+                }
+            }.toTypedArray()
+            tableModel.addRow(row)
+        }
+        updatePaginationLabel()
+    }
+
+    private fun updatePaginationLabel() {
+        val total = allItems.size
+        if (total == 0) {
+            paginationLabel.text = " "
+            showAllBtn.isVisible = false
+            show500Btn.isVisible = false
+            return
+        }
+        val needsPagination = total > PAGE_SIZE
+        if (!showAll && needsPagination) {
+            paginationLabel.text = "  Showing first $PAGE_SIZE of $total rows"
+            showAllBtn.isVisible = true
+            show500Btn.isVisible = false
+        } else {
+            paginationLabel.text = "  Showing all $total rows"
+            showAllBtn.isVisible = false
+            show500Btn.isVisible = showAll && needsPagination // allow switching back
+        }
+    }
+
+    // ─── Search / filter ──────────────────────────────────────────────────────
+
+    private fun applyFilter() {
+        val text = searchField.text.trim()
+        rowSorter.rowFilter = when {
+            text.isBlank() -> null
+            else -> try {
+                RowFilter.regexFilter<DefaultTableModel, Int>("(?i)${Regex.escape(text)}")
+            } catch (_: Exception) { null }
+        }
+    }
+
+    // ─── Column sizing ────────────────────────────────────────────────────────
+
+    /** Measures column widths from [allItems] (up to 30 samples) — independent of pagination. */
+    private fun autoSizeColumns() {
+        if (columnNames.isEmpty()) return
+        val headerFm = table.tableHeader.getFontMetrics(table.tableHeader.font)
+        val cellFm   = table.getFontMetrics(table.font)
+        columnNames.forEachIndexed { i, colName ->
+            val col     = table.columnModel.getColumn(i)
+            val headerW = headerFm.stringWidth(colName) + JBUI.scale(24)
+            val contentW = allItems.take(30)
+                .mapNotNull { item ->
+                    if (!item.isObject) null
+                    else {
+                        val node = item.get(colName)
+                        when {
+                            node == null || node.isNull -> "null"
+                            node.isTextual             -> node.asText()
+                            else                       -> node.toString()
+                        }
+                    }
+                }
+                .maxOfOrNull { s ->
+                    val display = if (colName == "_class") s.substringAfterLast('.') else s
+                    cellFm.stringWidth(display) + JBUI.scale(20)
+                } ?: JBUI.scale(60)
+            col.minWidth       = JBUI.scale(40)
+            col.preferredWidth = maxOf(headerW, contentW).coerceAtMost(JBUI.scale(280))
+        }
     }
 
     // ─── Toolbar ──────────────────────────────────────────────────────────────
 
-    private fun buildToolbar(): JPanel = JPanel(FlowLayout(FlowLayout.LEFT, 4, 2)).apply {
+    private fun buildToolbar(): JPanel = JPanel(BorderLayout()).apply {
         border = JBUI.Borders.customLine(JBColor.border(), 0, 0, 1, 0)
-        copyRowBtn = JButton("Copy Row", AllIcons.Actions.Copy).apply {
-            toolTipText = "Copy selected row as a JSON object"
-            addActionListener { copySelectedRow(); showButtonFeedback(copyRowBtn) }
+
+        val leftPanel = JPanel(FlowLayout(FlowLayout.LEFT, 4, 2)).apply {
+            isOpaque = false
+            copyRowBtn = JButton("Copy Row", AllIcons.Actions.Copy).apply {
+                toolTipText = "Copy selected row as a JSON object"
+                addActionListener { copySelectedRow(); showButtonFeedback(copyRowBtn) }
+            }
+            copyJsonBtn = JButton("Copy JSON", AllIcons.FileTypes.Json).apply {
+                toolTipText = "Copy all results as formatted JSON"
+                addActionListener { copyAllAsJson(); showButtonFeedback(copyJsonBtn) }
+            }
+            copyStringBtn = JButton("Copy as String", AllIcons.FileTypes.Text).apply {
+                toolTipText = "Copy all results as an escaped JSON string"
+                addActionListener { copyAllAsString(); showButtonFeedback(copyStringBtn) }
+            }
+            add(copyRowBtn)
+            add(copyJsonBtn)
+            add(copyStringBtn)
         }
-        copyJsonBtn = JButton("Copy JSON", AllIcons.FileTypes.Json).apply {
-            toolTipText = "Copy all results as formatted JSON"
-            addActionListener { copyAllAsJson(); showButtonFeedback(copyJsonBtn) }
+
+        val rightPanel = JPanel(FlowLayout(FlowLayout.RIGHT, 4, 2)).apply {
+            isOpaque = false
+            add(JLabel("Filter:").apply { foreground = JBColor.GRAY })
+            add(searchField)
         }
-        copyStringBtn = JButton("Copy as String", AllIcons.FileTypes.Text).apply {
-            toolTipText = "Copy all results as an escaped JSON string"
-            addActionListener { copyAllAsString(); showButtonFeedback(copyStringBtn) }
+
+        add(leftPanel, BorderLayout.WEST)
+        add(rightPanel, BorderLayout.EAST)
+    }
+
+    // ─── Bottom bar ───────────────────────────────────────────────────────────
+
+    private fun buildBottomBar(): JPanel {
+        showAllBtn = JButton("Show All").apply {
+            font = font.deriveFont(font.size - 1f)
+            isVisible = false
+            toolTipText = "Load and display all rows (may be slow for very large results)"
+            addActionListener {
+                showAll = true
+                repopulateRows()
+                applyFilter()
+            }
         }
-        add(copyRowBtn)
-        add(copyJsonBtn)
-        add(copyStringBtn)
+        show500Btn = JButton("Show $PAGE_SIZE").apply {
+            font = font.deriveFont(font.size - 1f)
+            isVisible = false
+            toolTipText = "Return to showing only the first $PAGE_SIZE rows"
+            addActionListener {
+                showAll = false
+                repopulateRows()
+                applyFilter()
+            }
+        }
+
+        val paginationRow = JPanel(BorderLayout()).apply {
+            isOpaque = false
+            add(paginationLabel, BorderLayout.WEST)
+            add(JPanel(FlowLayout(FlowLayout.RIGHT, 4, 0)).apply {
+                isOpaque = false
+                add(show500Btn)
+                add(showAllBtn)
+            }, BorderLayout.EAST)
+        }
+
+        return JPanel(BorderLayout()).apply {
+            border = JBUI.Borders.customLine(JBColor.border(), 1, 0, 0, 0)
+            add(paginationRow, BorderLayout.NORTH)
+            add(statusLabel,   BorderLayout.SOUTH)
+        }
     }
 
     // ─── Context menu ─────────────────────────────────────────────────────────
@@ -266,7 +428,8 @@ class ResultTablePanel(private val project: Project) : JPanel(BorderLayout()) {
         add(JSeparator())
         add(JMenuItem("Navigate to Class", AllIcons.Actions.Find).apply {
             addActionListener {
-                val row = table.selectedRow; val col = table.selectedColumn
+                val row = table.selectedRow
+                val col = table.selectedColumn
                 if (row < 0 || col < 0) return@addActionListener
                 val colName = table.columnModel.getColumn(col).headerValue as? String
                 if (colName != "_class") return@addActionListener
@@ -322,8 +485,7 @@ class ResultTablePanel(private val project: Project) : JPanel(BorderLayout()) {
         val row = table.selectedRow
         val col = table.selectedColumn
         if (row < 0 || col < 0) return
-        val value = table.getValueAt(row, col)?.toString() ?: ""
-        toClipboard(value)
+        toClipboard(table.getValueAt(row, col)?.toString() ?: "")
     }
 
     private fun copySelectedRow() {
@@ -357,38 +519,38 @@ class ResultTablePanel(private val project: Project) : JPanel(BorderLayout()) {
     // ─── Copy feedback ────────────────────────────────────────────────────────
 
     /**
-     * Temporarily changes a toolbar [button] to show a green "Copied!" state
-     * for 1.5 s, then restores the original text/icon.
+     * Temporarily changes a toolbar [button] to a green "Copied!" state for
+     * 1.5 s, then restores the original text/icon.
      */
     private fun showButtonFeedback(button: JButton) {
-        feedbackTimer?.stop()
+        buttonFeedbackTimer?.stop()
         val origText = button.text
         val origIcon = button.icon
-        button.text = "Copied!"
-        button.icon = AllIcons.General.InspectionsOK
+        button.text      = "Copied!"
+        button.icon      = AllIcons.General.InspectionsOK
         button.foreground = JBColor(Color(0x2E7D32), Color(0x66BB6A))
-        button.isEnabled = false
-        feedbackTimer = Timer(1500) {
-            button.text = origText
-            button.icon = origIcon
+        button.isEnabled  = false
+        buttonFeedbackTimer = Timer(1500) {
+            button.text      = origText
+            button.icon      = origIcon
             button.foreground = JBColor.foreground()
-            button.isEnabled = true
+            button.isEnabled  = true
         }.also { it.isRepeats = false; it.start() }
     }
 
     /**
      * Flashes "✓ Copied to clipboard" in the status label for 1.5 s —
-     * used for context-menu copy actions that have no persistent button.
+     * used by context-menu copy actions that have no dedicated button.
      */
     private fun showStatusFeedback() {
-        feedbackTimer?.stop()
+        statusFeedbackTimer?.stop()
         val origText  = statusLabel.text
         val origColor = statusLabel.foreground
-        statusLabel.text      = "  ✓ Copied to clipboard"
-        statusLabel.foreground = JBColor(Color(0x2E7D32), Color(0x66BB6A))
-        feedbackTimer = Timer(1500) {
-            statusLabel.text      = origText
-            statusLabel.foreground = origColor
+        statusLabel.text       = "  ✓ Copied to clipboard"
+        statusLabel.foreground  = JBColor(Color(0x2E7D32), Color(0x66BB6A))
+        statusFeedbackTimer = Timer(1500) {
+            statusLabel.text       = origText
+            statusLabel.foreground  = origColor
         }.also { it.isRepeats = false; it.start() }
     }
 
@@ -436,7 +598,7 @@ class ResultTablePanel(private val project: Project) : JPanel(BorderLayout()) {
                 }
                 colName == "_class" && value is String && value.isNotBlank() -> {
                     if (!isSelected) foreground = JBColor(Color(0x0066CC), Color(0x4A9EFF))
-                    // Show only the simple class name; full FQN via tooltip + status label
+                    // Display only the short name; full FQN via tooltip + status bar
                     val shortName = value.substringAfterLast('.')
                     text = "<html><u>${esc(shortName)}</u></html>"
                 }

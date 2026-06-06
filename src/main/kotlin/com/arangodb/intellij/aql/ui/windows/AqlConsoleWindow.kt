@@ -59,6 +59,9 @@ class AqlConsoleWindow(private val project: Project, @Suppress("UNUSED_PARAMETER
     // ─── History ────────────────────────────────────────────────────────────
     private val historyModel = DefaultListModel<HistoryEntry>()
     private val historyList  = JBList(historyModel)
+    /** Guard: prevents the selection listener from overwriting the editor while
+     *  history items are being inserted/restored programmatically. */
+    private var isRestoringHistory = false
 
     // ─── Root component ─────────────────────────────────────────────────────
     private val tabs = JBTabbedPane()
@@ -144,7 +147,7 @@ class AqlConsoleWindow(private val project: Project, @Suppress("UNUSED_PARAMETER
     private fun buildHistoryPanel(): JComponent {
         historyList.selectionMode = ListSelectionModel.SINGLE_SELECTION
         historyList.addListSelectionListener { e ->
-            if (e.valueIsAdjusting) return@addListSelectionListener
+            if (e.valueIsAdjusting || isRestoringHistory) return@addListSelectionListener
             val entry = historyList.selectedValue ?: return@addListSelectionListener
             editorField.text = entry.query
         }
@@ -200,6 +203,9 @@ class AqlConsoleWindow(private val project: Project, @Suppress("UNUSED_PARAMETER
         val ts = LocalDateTime.now().format(TS_FMT)
         if (query.isNotBlank()) {
             SwingUtilities.invokeLater {
+                // Clear selection BEFORE inserting so the index-shift does not
+                // trigger the ListSelectionListener and overwrite the editor.
+                historyList.clearSelection()
                 historyModel.insertElementAt(HistoryEntry(ts, query), 0)
                 if (historyModel.size > 200) historyModel.removeElementAt(historyModel.size - 1)
                 consoleState.history.clear()
@@ -293,11 +299,17 @@ class AqlConsoleWindow(private val project: Project, @Suppress("UNUSED_PARAMETER
             editorField.text = state.editorText
         }
 
-        // Restore history list (stored newest-first)
+        // Restore history list (stored newest-first) — guard prevents the
+        // selection listener from firing and clobbering the editor text.
         if (state.history.isNotEmpty()) {
             SwingUtilities.invokeLater {
-                state.history.forEach { item ->
-                    historyModel.addElement(HistoryEntry(item.timestamp, item.query))
+                isRestoringHistory = true
+                try {
+                    state.history.forEach { item ->
+                        historyModel.addElement(HistoryEntry(item.timestamp, item.query))
+                    }
+                } finally {
+                    isRestoringHistory = false
                 }
             }
         }
