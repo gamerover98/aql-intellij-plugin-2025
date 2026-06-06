@@ -74,6 +74,7 @@ class AqlConsoleFileEditor(
     private val editorTextListener = object : DocumentListener {
         override fun documentChanged(event: DocumentEvent) {
             AqlConsoleStateService.getInstance(project).state.editorText = editorField.text
+            syncBindParams()
         }
     }
 
@@ -87,6 +88,12 @@ class AqlConsoleFileEditor(
     private val historyModel = DefaultListModel<HistoryEntry>()
     private val historyList  = JBList(historyModel)
     private var isRestoringHistory = false
+
+    // ─── Bind parameters ──────────────────────────────────────────────────────
+    private val bindParamsPanel = BindParamsPanel()
+
+    // ─── Bottom tabbed pane (history + bind params) ───────────────────────────
+    private val historyPane = JBTabbedPane()
 
     // ─── Root component ───────────────────────────────────────────────────────
     private val root: JComponent
@@ -117,9 +124,8 @@ class AqlConsoleFileEditor(
             border = JBUI.Borders.empty()
         }
 
-        val historyPane = JBTabbedPane().apply {
-            addTab("Query History", AllIcons.Vcs.History, buildHistoryPanel())
-        }
+        historyPane.addTab("Query History", AllIcons.Vcs.History, buildHistoryPanel())
+        historyPane.addTab("Parameters",   AllIcons.Nodes.Parameter, bindParamsPanel.component)
 
         val splitter = JBSplitter(true, 0.65f).apply {
             firstComponent  = editorWrapper
@@ -230,14 +236,17 @@ class AqlConsoleFileEditor(
     // ─── Actions ──────────────────────────────────────────────────────────────
 
     private fun executeQuery() {
-        val query = editorField.text.trim().ifEmpty { return }
-        val queryId = UUID.randomUUID().toString()
+        val query    = editorField.text.trim().ifEmpty { return }
+        val bindVars = bindParamsPanel.getBindVars()
+        val queryId  = UUID.randomUUID().toString()
         val resultFile = AqlResultVirtualFile("Result", queryId)
         FileEditorManager.getInstance(project).openFile(resultFile, true)
         setRunningState(true)
         ApplicationManager.getApplication().executeOnPooledThread {
             try {
-                AqlDataService.with(project).executeQuery(query, queryId)
+                val svc = AqlDataService.with(project)
+                if (bindVars.isEmpty()) svc.executeQuery(query, queryId)
+                else svc.executeQuery(query, bindVars, queryId)
             } finally {
                 SwingUtilities.invokeLater { setRunningState(false) }
             }
@@ -245,14 +254,17 @@ class AqlConsoleFileEditor(
     }
 
     private fun explainQuery() {
-        val query = editorField.text.trim().ifEmpty { return }
-        val queryId = UUID.randomUUID().toString()
+        val query    = editorField.text.trim().ifEmpty { return }
+        val bindVars = bindParamsPanel.getBindVars()
+        val queryId  = UUID.randomUUID().toString()
         val resultFile = AqlResultVirtualFile("Explain", queryId)
         FileEditorManager.getInstance(project).openFile(resultFile, true)
         setRunningState(true)
         ApplicationManager.getApplication().executeOnPooledThread {
             try {
-                AqlDataService.with(project).explainQuery(query, queryId)
+                val svc = AqlDataService.with(project)
+                if (bindVars.isEmpty()) svc.explainQuery(query, queryId)
+                else svc.explainQuery(query, bindVars, queryId)
             } finally {
                 SwingUtilities.invokeLater { setRunningState(false) }
             }
@@ -268,6 +280,24 @@ class AqlConsoleFileEditor(
     private fun setRunningState(running: Boolean) {
         executeBtn?.isEnabled = !running
         explainBtn?.isEnabled = !running
+    }
+
+    // ─── Bind parameters sync ─────────────────────────────────────────────────
+
+    /**
+     * Re-parses the editor text for bind parameters, updates the Parameters tab
+     * title with the current count, and auto-switches to it the first time
+     * parameters appear in the query.
+     */
+    private fun syncBindParams() {
+        val hadParams = bindParamsPanel.hasParams()
+        bindParamsPanel.syncWithQuery(editorField.text)
+        val count = bindParamsPanel.paramCount()
+        val title = if (count > 0) "Parameters ($count)" else "Parameters"
+        historyPane.setTitleAt(1, title)
+        if (!hadParams && bindParamsPanel.hasParams() && historyPane.selectedIndex != 1) {
+            historyPane.selectedIndex = 1
+        }
     }
 
     // ─── Database selector ────────────────────────────────────────────────────
