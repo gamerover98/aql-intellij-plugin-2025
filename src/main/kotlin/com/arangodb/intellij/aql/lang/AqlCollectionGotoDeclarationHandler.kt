@@ -4,11 +4,11 @@ import com.arangodb.intellij.aql.actions.AqlDataService
 import com.arangodb.intellij.aql.db.AqlDatabaseService
 import com.arangodb.intellij.aql.grammar.custom.psi.AqlMixinType
 import com.arangodb.intellij.aql.grammar.custom.psi.AqlNamedElement
-import com.arangodb.intellij.aql.ui.windows.AqlConsoleWindow
+import com.arangodb.intellij.aql.ui.console.AqlConsoleVirtualFile
 import com.intellij.codeInsight.navigation.actions.GotoDeclarationHandler
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.editor.Editor
-import com.intellij.openapi.wm.ToolWindowManager
+import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.psi.PsiElement
 
 /**
@@ -50,12 +50,11 @@ class AqlCollectionGotoDeclarationHandler : GotoDeclarationHandler {
             else -> "FOR doc IN `$name` LIMIT 100 RETURN doc"
         }
 
-        // Execute on EDT after current action completes to avoid threading issues
+        // Execute on EDT after current action completes, then open the console editor tab
         ApplicationManager.getApplication().invokeLater {
             AqlDataService.with(project).executeQuery(query)
-            ToolWindowManager.getInstance(project)
-                .getToolWindow(AqlConsoleWindow.WINDOW_ID)
-                ?.activate(null, true)
+            FileEditorManager.getInstance(project)
+                .openFile(AqlConsoleVirtualFile.getInstance(project), true)
         }
 
         // Return empty array: we handled navigation ourselves (data shown in console)

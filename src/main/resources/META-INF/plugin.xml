@@ -12,17 +12,14 @@
              interact with plugin features such as database management, consoles, or
              custom UIs directly within the IntelliJ interface. -->
         <!-- TODO: Add/Edit here the reworked tool window for ArangoDB management and console -->
-        <toolWindow id="ArangoToolWindow"
+        <toolWindow id="ArangoDB"
                     anchor="right"
                     secondary="false"
                     factoryClass="com.arangodb.intellij.aql.toolWindow.ServerToolWindowFactory"
                     icon="/icons/toolbarArangoDB.png"/>
 
-        <toolWindow id="ArangoDB Console"
-                    anchor="bottom"
-                    secondary="false"
-                    factoryClass="com.arangodb.intellij.aql.ui.ConsoleWindowFactory"
-                    icon="/icons/toolbarArangoDB.png"/>
+        <!-- Issue 3/4: AQL Console is now an editor tab; the bottom tool window is removed. -->
+        <fileEditorProvider implementation="com.arangodb.intellij.aql.ui.console.AqlConsoleEditorProvider"/>
 
         <!--
           //############################################

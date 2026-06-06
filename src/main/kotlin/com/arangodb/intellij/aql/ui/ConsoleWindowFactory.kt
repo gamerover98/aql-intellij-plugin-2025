@@ -1,20 +1,19 @@
 package com.arangodb.intellij.aql.ui
 
-import com.arangodb.intellij.aql.ui.windows.AqlConsoleWindow
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
-import com.intellij.ui.content.ContentFactory
 
+/**
+ * @deprecated The AQL Console has been moved to an editor tab.
+ * See [com.arangodb.intellij.aql.ui.console.AqlConsoleEditorProvider] and
+ * [com.arangodb.intellij.aql.ui.console.AqlConsoleFileEditor].
+ * This factory is no longer registered in plugin.xml.
+ */
+@Deprecated("AQL Console is now an editor tab — see AqlConsoleEditorProvider")
 class ConsoleWindowFactory : ToolWindowFactory {
-
-    private var dataWindow: AqlConsoleWindow? = null
-
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
-        dataWindow = AqlConsoleWindow(project, toolWindow)
-        val content = ContentFactory.getInstance().createContent(dataWindow!!.getContent(), "", false)
-        toolWindow.contentManager.addContent(content)
-        Disposer.register(project, dataWindow!!)
+        // No-op: this factory is no longer registered in plugin.xml.
+        // The AQL Console is now opened as an editor tab via AqlConsoleVirtualFile.
     }
 }

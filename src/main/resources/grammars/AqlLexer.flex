@@ -331,6 +331,7 @@ TEXT_SINGLE='(''|[^']*)'
 TEXT_DOUBLE=\"([^\\\"\r\n]|\\[^\r\n])*\"
 NUMBER=-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]*)?
 ID=[a-zA-Z_]([[a-zA-Z_0-9]][a-zA-Z_0-9]*)?
+BACKTICK_ID=`[^`\r\n]+`
 SPACE=[ \t\n\x0B\f\r]+
 
 %%
@@ -688,6 +689,7 @@ SPACE=[ \t\n\x0B\f\r]+
   {L_COMMENT}                          { return L_COMMENT; }
   {TEXT_SINGLE}                        { return TEXT_SINGLE; }
   {TEXT_DOUBLE}                        { return TEXT_DOUBLE; }
+  {BACKTICK_ID}                        { return BACKTICK_ID; }
   {NUMBER}                             { return NUMBER; }
   {ID}                                 { return ID; }
   {SPACE}                              { return SPACE; }

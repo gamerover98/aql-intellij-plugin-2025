@@ -5,13 +5,14 @@ import com.arangodb.intellij.aql.actions.ActionBusEvent
 import com.arangodb.intellij.aql.actions.AqlDataService
 import com.arangodb.intellij.aql.services.AqlConsoleStateService
 import com.arangodb.intellij.aql.services.ArangoProjectService
+import com.arangodb.intellij.aql.model.ArangoDbDatabase
 import com.arangodb.intellij.aql.model.ArangoDbServer
 import com.arangodb.intellij.aql.services.ServerListState
 import com.arangodb.intellij.aql.ui.DataWindowState
 import com.arangodb.intellij.aql.ui.actions.*
 import com.arangodb.intellij.aql.ui.renderers.AqlNodeModel
 import com.arangodb.intellij.aql.ui.renderers.AqlNodeRenderer
-import com.arangodb.intellij.aql.ui.windows.AqlConsoleWindow
+import com.arangodb.intellij.aql.ui.console.AqlConsoleVirtualFile
 import com.arangodb.intellij.aql.util.Icons
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.Disposable
@@ -22,7 +23,7 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
-import com.intellij.openapi.wm.ToolWindowManager
+import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.ui.CheckedTreeNode
 import com.intellij.ui.JBColor
 import com.intellij.ui.SimpleTextAttributes
@@ -95,7 +96,7 @@ import javax.swing.tree.DefaultTreeModel
 class ServerToolWindow(private val project: Project) : Disposable {
 
     companion object {
-        const val WINDOW_ID = "ArangoToolWindow"
+        const val WINDOW_ID = "ArangoDB"
     }
 
     // ─── Tree ─────────────────────────────────────────────────────────────────
@@ -505,10 +506,26 @@ class ServerToolWindow(private val project: Project) : Disposable {
     // ─── Mouse actions ────────────────────────────────────────────────────────
 
     private fun onDoubleClick(e: MouseEvent) {
-        val path = schemaTree.getPathForLocation(e.x, e.y) ?: return
+        val path  = schemaTree.getPathForLocation(e.x, e.y) ?: return
         val node  = path.lastPathComponent as? CheckedTreeNode ?: return
         val model = node.userObject as? AqlNodeModel ?: return
         if (model.type != AqlNodeModel.Type.COLLECTION && model.type != AqlNodeModel.Type.EDGE) return
+
+        // Issue 2: walk up the path to find the DATABASE ancestor and activate it
+        // silently (without a full refreshSchema() that would re-populate the tree).
+        val dbModel = path.path
+            .mapNotNull { (it as? CheckedTreeNode)?.userObject as? AqlNodeModel }
+            .lastOrNull { it.type == AqlNodeModel.Type.DATABASE }
+
+        if (dbModel != null && !dbModel.isSelected) {
+            val state = project.getService(DataWindowState::class.java).state ?: return
+            state.selectedDatabase = ArangoDbDatabase(dbModel.name ?: "")
+            dbModel.isSelected = true
+            node.parent?.let { parent ->
+                (schemaTree.model as? DefaultTreeModel)?.nodeChanged(parent)
+            }
+        }
+
         executeSampleQuery(model.displayName ?: return)
     }
 
@@ -519,9 +536,9 @@ class ServerToolWindow(private val project: Project) : Disposable {
     }
 
     private fun openInConsole() {
-        ToolWindowManager.getInstance(project)
-            .getToolWindow(AqlConsoleWindow.WINDOW_ID)
-            ?.activate(null, true)
+        // Issue 3/4: open (or re-focus) the AQL Console as an editor tab
+        val file = AqlConsoleVirtualFile.getInstance(project)
+        FileEditorManager.getInstance(project).openFile(file, true)
     }
 
     private fun confirmAndRemoveServer() {

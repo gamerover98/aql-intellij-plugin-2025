@@ -106,6 +106,8 @@ class AqlSyntaxHighlighter(
                 return when {
                     name.startsWith("F_") -> FUNCTION
                     name.startsWith("T_") -> KEYWORD
+                    // Issue 5: backtick-quoted identifiers (`collection_name`) highlighted as strings
+                    name == "BACKTICK_ID" -> STRINGS
                     else -> EMPTY.also {
                         log.info("settings: {}", type)
                     }

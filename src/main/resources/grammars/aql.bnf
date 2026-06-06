@@ -394,6 +394,7 @@ T_NONE = "none"
     NUMBER='regexp:-?(0|[1-9]\d*)(\.\d+)?([eE][+-]?\d*)?'
     //NUMBER_RANGE='regexp:[1-9][0-9]?|100'
     ID = 'regexp:[a-zA-Z_]([[a-zA-Z_0-9]]\w*)?'
+    BACKTICK_ID = 'regexp:`[^`\r\n]+`'
     SPACE='regexp:\s+'
 ]
 
@@ -1469,7 +1470,7 @@ SystemProperty ::=  T_KEY | T_ID  | T_SYS_FROM  | T_SYS_TO | F_ATTRIBUTES | T_SY
                    methods=[ getName setName getPresentation]
                    mixin="com.arangodb.intellij.aql.grammar.custom.psi.impl.AqlSystemPropertyMixin"
 }
-PropertyName ::= ID | T_SYS_EDGES | T_SYS_VERTICES{
+PropertyName ::= ID | BACKTICK_ID | T_SYS_EDGES | T_SYS_VERTICES{
                    methods=[ getName setName getPresentation]
                    mixin="com.arangodb.intellij.aql.grammar.custom.psi.impl.AqlIdMixin"
 }
@@ -1481,7 +1482,7 @@ PropertyName ::= ID | T_SYS_EDGES | T_SYS_VERTICES{
 //private not_brace_or_next_value ::=  !('}'  | expression_argument)
 
 private declaration_lookahead ::= function_lookahead | variable_lookahead
-private variable_lookahead ::= &ID
+private variable_lookahead ::= &(ID | BACKTICK_ID)
 private function_lookahead ::= &(function_names '(')
 private reserved_function_lookahead ::= &(reserved_keywords '('){pin=2}
 private brace_lookahead ::= &('('){pin=2}
