@@ -11,6 +11,7 @@ import com.intellij.openapi.project.Project
  *
  * Survives IDE restarts — stored in `.idea/aql-console.xml`.
  * Holds:
+ *  - [State.editorText] — the current AQL query text in the editor
  *  - [State.history]    — up to 200 most-recent query history entries (newest first)
  *  - [State.lastResult] — the raw JSON of the last executed query (capped at 200 000 chars)
  */
@@ -31,6 +32,7 @@ class AqlConsoleStateService : PersistentStateComponent<AqlConsoleStateService.S
     )
 
     class State {
+        var editorText: String = ""
         var history: MutableList<HistoryItem> = mutableListOf()
         var lastResult: String = ""
     }

@@ -22,6 +22,8 @@ import com.intellij.ui.components.JBList
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTabbedPane
 import com.intellij.util.ui.JBUI
+import com.intellij.openapi.editor.event.DocumentEvent
+import com.intellij.openapi.editor.event.DocumentListener
 import java.awt.BorderLayout
 import java.awt.FlowLayout
 import java.awt.event.KeyEvent
@@ -41,6 +43,11 @@ class AqlConsoleWindow(private val project: Project, @Suppress("UNUSED_PARAMETER
 
     // ─── Editor area ────────────────────────────────────────────────────────
     private val editorField = LanguageTextField(AqlLanguage, project, "", false)
+    private val editorTextListener = object : DocumentListener {
+        override fun documentChanged(event: DocumentEvent) {
+            AqlConsoleStateService.getInstance(project).state.editorText = editorField.text
+        }
+    }
 
     // ─── Toolbar components ─────────────────────────────────────────────────
     private val dbSelector = JComboBox<String>()
@@ -162,6 +169,10 @@ class AqlConsoleWindow(private val project: Project, @Suppress("UNUSED_PARAMETER
     // ─── Event wiring ────────────────────────────────────────────────────────
 
     private fun wireEvents() {
+        // Persist editor content on every keystroke (in-memory update;
+        // IntelliJ flushes PersistentStateComponent to disk on IDE close / save-all).
+        editorField.addDocumentListener(editorTextListener)
+
         val bus = project.messageBus.connect(this)
 
         bus.subscribe(ActionBusEvent.AQL_QUERY_RESULT, ActionBusEvent { data ->
@@ -289,6 +300,12 @@ class AqlConsoleWindow(private val project: Project, @Suppress("UNUSED_PARAMETER
     private fun restorePersistedState() {
         val state = AqlConsoleStateService.getInstance(project).state
 
+        // Restore editor text — set directly; EditorTextField buffers it until the
+        // underlying editor is created, so no invokeLater needed here.
+        if (state.editorText.isNotBlank()) {
+            editorField.text = state.editorText
+        }
+
         // Restore history list (already newest-first in state)
         if (state.history.isNotEmpty()) {
             SwingUtilities.invokeLater {
@@ -313,6 +330,7 @@ class AqlConsoleWindow(private val project: Project, @Suppress("UNUSED_PARAMETER
     }
 
     override fun dispose() {
+        editorField.removeDocumentListener(editorTextListener)
         jsonPanel.dispose()
     }
 }
