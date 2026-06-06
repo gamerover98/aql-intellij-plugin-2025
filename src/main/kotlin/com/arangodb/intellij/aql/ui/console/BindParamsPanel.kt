@@ -33,6 +33,20 @@ class BindParamsPanel {
         columnModel.getColumn(1).preferredWidth = 340
         // Commit any in-progress cell edit when the table loses focus (e.g. click Execute)
         putClientProperty("terminateEditOnFocusLost", true)
+        // Tooltip on the Value column header explaining supported literal types
+        tableHeader.addMouseMotionListener(object : java.awt.event.MouseMotionAdapter() {
+            override fun mouseMoved(e: java.awt.event.MouseEvent) {
+                val col = tableHeader.columnAtPoint(e.point)
+                tableHeader.toolTipText = when (col) {
+                    1    -> "<html>Supported values:<br>" +
+                            "&nbsp;<b>null</b> → AQL null<br>" +
+                            "&nbsp;<b>123</b> &nbsp;→ integer<br>" +
+                            "&nbsp;<b>text</b> → string<br>" +
+                            "Leave blank to omit the parameter.</html>"
+                    else -> null
+                }
+            }
+        })
     }
 
     val component: JComponent = JPanel(BorderLayout()).apply {
@@ -56,7 +70,12 @@ class BindParamsPanel {
 
     /**
      * Returns the bind-variable map ready to pass to [com.arangodb.intellij.aql.actions.AqlDataService].
-     * Entries with a blank value are excluded so that ArangoDB can report them as missing.
+     *
+     * Value conventions (interpreted by [com.arangodb.intellij.aql.util.AqlUtils.convertToBindVariable]):
+     *  - blank → entry excluded; ArangoDB will report the parameter as missing
+     *  - `"null"` (case-insensitive) → Java `null`, serialised as AQL `null`
+     *  - parseable integer → sent as [Int]
+     *  - anything else → sent as [String]
      */
     fun getBindVars(): Map<String, String> = model.getBindVars()
 

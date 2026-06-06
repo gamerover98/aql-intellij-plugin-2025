@@ -120,7 +120,7 @@ class AqlDataService private constructor(private val project: Project) {
     fun getFieldNames(collectionName: String): List<String> =
         try { service.getFieldNames(collectionName, project) } catch (_: Exception) { emptyList() }
 
-    private fun executeQueryInternal(query: String, bindVars: Map<String, Any>, type: QueryType,
+    private fun executeQueryInternal(query: String, bindVars: Map<String, Any?>, type: QueryType,
                                       queryId: String = ""): AqlDataService {
         val state = project.getService(DataWindowState::class.java).state ?: return this
         val queryPlanEvent = messageBus.syncPublisher(ActionBusEvent.AQL_QUERY_RESULT)

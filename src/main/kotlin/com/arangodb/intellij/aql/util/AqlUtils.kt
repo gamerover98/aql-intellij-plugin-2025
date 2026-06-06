@@ -70,9 +70,20 @@ object AqlUtils {
         }
     }
 
+    /**
+     * Converts a raw string value typed by the user in the Parameters table into the
+     * concrete Kotlin/Java type that the ArangoDB driver should bind.
+     *
+     * Conversion rules (checked in order):
+     *  - blank / null input → empty string (excluded upstream by [BindParamsPanel])
+     *  - `"null"` (case-insensitive) → `null`  (AQL `null` value)
+     *  - parseable as integer → [Int]
+     *  - everything else → [String] as-is
+     */
     @JvmStatic
-    fun convertToBindVariable(value: String?): Any {
-        if (value == null) return ""
+    fun convertToBindVariable(value: String?): Any? {
+        if (value.isNullOrBlank()) return ""
+        if (value.trim().lowercase() == "null") return null
         return Ints.tryParse(value) ?: value
     }
 
@@ -152,7 +163,7 @@ object AqlUtils {
     }
 
     @JvmStatic
-    fun convertValues(bindVars: Map<String, String>?): Map<String, Any> {
+    fun convertValues(bindVars: Map<String, String>?): Map<String, Any?> {
         if (bindVars == null) return emptyMap()
         return bindVars.mapValues { (_, v) -> convertToBindVariable(v) }
     }
