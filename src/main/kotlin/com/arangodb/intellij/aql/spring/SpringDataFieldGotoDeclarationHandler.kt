@@ -5,47 +5,54 @@ import com.arangodb.intellij.aql.grammar.custom.psi.AqlNamedElement
 import com.intellij.codeInsight.navigation.actions.GotoDeclarationHandler
 import com.intellij.lang.injection.InjectedLanguageManager
 import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.project.Project
+import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiAnnotation
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiClassType
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiLiteralExpression
 import com.intellij.psi.PsiMethod
+import com.intellij.psi.search.GlobalSearchScope
+import com.intellij.psi.search.searches.AnnotatedElementsSearch
 import com.intellij.psi.util.PsiTreeUtil
 
 /**
- * Handles Ctrl+Click on AQL field references inside `@Query` annotations in
- * Spring Data ArangoDB repositories.
+ * Handles Ctrl+Click inside `@Query` annotation strings in Spring Data ArangoDB repositories.
  *
- * When the cursor is on a property name in a path expression (e.g. `surname` in
- * `c.surname`), this handler resolves the corresponding field in the entity class
- * declared as the first type parameter of the repository interface, then navigates
- * the editor to that field declaration.
+ * Two navigation targets are supported:
  *
- * Two resolution paths:
- *  - **Path A (AQL injection active)**: `sourceElement` is an AQL PSI element from the
- *    language injection created by [AqlQueryAnnotationInjector]. The handler checks that
- *    the element is inside a `PropertyLookup`, resolves the injection host back to the
- *    Java `PsiLiteralExpression`, and proceeds from there.
- *  - **Path B (Java-level fallback)**: `sourceElement` is a plain Java token inside a
- *    `PsiLiteralExpression`. The handler uses the `offset` to locate the word at the
- *    cursor and checks whether it is immediately preceded by `.` in the source text.
+ * **Property field** (`c.surname` → `surname`):
+ *  The cursor is on the RHS of a `.` operator (inside a `PropertyLookup` in the AQL PSI).
+ *  Resolves the word as a Java field in the repository's entity class (first type parameter).
+ *  Field lookup order:
+ *   1. Direct Java field name (`Character#surname`)
+ *   2. `@Field("surname")` annotation on a differently-named field
  *
- * Field resolution order (same for both paths):
- *  1. **Direct Java field name** (`Character#surname`)
- *  2. **`@Field("surname")` annotation** on a differently-named Java field
+ * **Collection name** (`FOR c IN characters` → `characters`):
+ *  The cursor is on a plain identifier that is NOT a property access.
+ *  Searches the project for a `@Document`-annotated class whose collection name matches.
+ *  Convention: `@Document("characters")` explicit value, or lower-cased class name default.
  *
- * Returns `null` (handler abstains) when:
- *  - the cursor is not on a property-access token
- *  - the AQL is not inside a `@Query` annotation
- *  - the entity class cannot be inferred from the repository type parameter
- *  - no matching field is found
+ * Two resolution paths (tried in order):
+ *  - **Path A (AQL injection active)**: `sourceElement` is an AQL PSI element produced by
+ *    [AqlQueryAnnotationInjector]. The PSI parent tells us whether we have a property lookup
+ *    or a plain identifier.
+ *  - **Path B (Java-level fallback)**: `sourceElement` is a Java token inside the string
+ *    literal. Text analysis with the `offset` parameter determines whether the word is
+ *    preceded by `.`.
+ *
+ * Returns `null` (abstains) when:
+ *  - the cursor is not on an AQL identifier in a `@Query` annotation
+ *  - the entity class or collection class cannot be resolved
+ *  - no matching field/class is found
  */
 class SpringDataFieldGotoDeclarationHandler : GotoDeclarationHandler {
 
     companion object {
-        private const val QUERY_ANNOTATION = "com.arangodb.springframework.annotation.Query"
-        private const val FIELD_ANNOTATION  = "com.arangodb.springframework.annotation.Field"
+        private const val QUERY_ANNOTATION    = "com.arangodb.springframework.annotation.Query"
+        private const val DOCUMENT_ANNOTATION = "com.arangodb.springframework.annotation.Document"
+        private const val FIELD_ANNOTATION    = "com.arangodb.springframework.annotation.Field"
     }
 
     override fun getGotoDeclarationTargets(
@@ -55,21 +62,17 @@ class SpringDataFieldGotoDeclarationHandler : GotoDeclarationHandler {
     ): Array<PsiElement>? {
         val sourceEl = sourceElement ?: return null
 
-        // ── Path A: AQL injection is active ───────────────────────────────────
-        // AqlQueryAnnotationInjector produces AQL PSI elements inside @Query strings.
-        // If that's what we have, use the fast, structured AQL path.
+        // Path A: AQL injection is active — sourceElement is an AQL PSI element
         aqlInjectedPath(sourceEl)?.let { return it }
 
-        // ── Path B: Java-level fallback ───────────────────────────────────────
-        // If injection hasn't fired yet, or is otherwise unavailable, fall back to
-        // text analysis of the raw Java string literal at the cursor position.
+        // Path B: Java-level fallback — sourceElement is a raw Java token
         return javaLiteralPath(sourceEl, offset)
     }
 
     // ─── Path A: injection-based ──────────────────────────────────────────────
 
     private fun aqlInjectedPath(sourceEl: PsiElement): Array<PsiElement>? {
-        // Normalize to the PropertyName (aqlType=ID) AQL element
+        // Normalize to the PropertyName (aqlType=ID) element
         val idElement: AqlNamedElement = when {
             sourceEl is AqlNamedElement && sourceEl.aqlType == AqlMixinType.ID ->
                 sourceEl
@@ -79,112 +82,81 @@ class SpringDataFieldGotoDeclarationHandler : GotoDeclarationHandler {
             else -> return null
         }
 
-        // Must be inside a PropertyLookup node (i.e. the RHS of a `.` operator).
-        // Collection names and loop variables are NOT inside PropertyLookup.
-        val lookupParent = idElement.parent
-        if (lookupParent !is AqlNamedElement ||
-            lookupParent.aqlType != AqlMixinType.PROPERTY_LOOKUP
-        ) return null
+        val name = idElement.name?.trim('`')?.takeIf { it.isNotBlank() } ?: return null
 
-        // Strip optional backtick quoting (`surname` → surname)
-        val fieldName = idElement.name?.trim('`')?.takeIf { it.isNotBlank() } ?: return null
-
-        // Require injection context: element must live inside a Java string literal
+        // Must be inside language injection (i.e., inside a @Query Java string)
         val injectionHost = InjectedLanguageManager.getInstance(sourceEl.project)
             .getInjectionHost(sourceEl) ?: return null
 
-        return resolveFromHost(injectionHost, fieldName)
+        // Dispatch based on PSI parent:
+        //   PropertyLookup parent → c.surname (field access)
+        //   Any other parent      → characters (collection reference)
+        val lookupParent = idElement.parent
+        val isPropertyAccess = lookupParent is AqlNamedElement &&
+                lookupParent.aqlType == AqlMixinType.PROPERTY_LOOKUP
+
+        return resolveFromHost(injectionHost, name, isPropertyAccess)
     }
 
     // ─── Path B: Java literal text analysis ───────────────────────────────────
 
     private fun javaLiteralPath(sourceEl: PsiElement, offset: Int): Array<PsiElement>? {
-        // Find the PsiLiteralExpression that contains the cursor
-        val literal: PsiLiteralExpression =
-            when {
-                sourceEl is PsiLiteralExpression -> sourceEl
-                sourceEl.parent is PsiLiteralExpression ->
-                    sourceEl.parent as PsiLiteralExpression
-                else -> return null
-            }
-
-        // Must be a string literal
+        val literal: PsiLiteralExpression = when {
+            sourceEl is PsiLiteralExpression        -> sourceEl
+            sourceEl.parent is PsiLiteralExpression -> sourceEl.parent as PsiLiteralExpression
+            else                                    -> return null
+        }
         if (literal.value !is String) return null
 
-        val literalText = literal.text   // includes surrounding quotes, e.g. "FOR c IN..."
-        val contentStart = literal.textRange.startOffset + 1  // offset of char after opening "
+        // Verify the literal is inside a @Query annotation before doing any text work
+        val annotation = PsiTreeUtil.getParentOfType(literal, PsiAnnotation::class.java)
+            ?: return null
+        if (annotation.qualifiedName != QUERY_ANNOTATION) return null
 
-        val posInContent = offset - contentStart
-        if (posInContent < 0 || posInContent >= literalText.length - 1) return null
+        val text    = literal.text               // includes surrounding quotes
+        val content = text.substring(1, text.length - 1)  // raw string content
+        val posInContent = offset - literal.textRange.startOffset - 1
+        if (posInContent < 0 || posInContent >= content.length) return null
 
-        // Extract the identifier word at posInContent (using the raw literal text
-        // without the surrounding quotes, so index 0 = first char of the string content)
-        val content = literalText.substring(1, literalText.length - 1)
-        val fieldName = propertyNameAt(content, posInContent) ?: return null
+        val word = wordAt(content, posInContent) ?: return null
+        val isPropAccess = isPrecededByDot(content, posInContent)
 
-        return resolveFromHost(literal, fieldName)
+        return resolveFromHost(literal, word, isPropAccess)
     }
 
-    /**
-     * Returns the identifier word at [pos] in [content] if and only if that word is
-     * immediately preceded by a `.` character (AQL property-access pattern `var.field`).
-     * Returns `null` if the cursor is not on an identifier, or if the identifier is not
-     * preceded by `.`.
-     */
-    private fun propertyNameAt(content: String, pos: Int): String? {
-        if (pos < 0 || pos >= content.length) return null
-        val c = content[pos]
-        if (!c.isLetterOrDigit() && c != '_') return null  // cursor is between tokens
-
-        // Walk left to find word start
-        var start = pos
-        while (start > 0 && (content[start - 1].isLetterOrDigit() || content[start - 1] == '_')) {
-            start--
-        }
-
-        // Must be preceded by '.' to qualify as a property access
-        if (start == 0 || content[start - 1] != '.') return null
-
-        // Walk right to find word end
-        var end = pos
-        while (end < content.length - 1 &&
-               (content[end + 1].isLetterOrDigit() || content[end + 1] == '_')
-        ) {
-            end++
-        }
-
-        return content.substring(start, end + 1).takeIf { it.isNotBlank() }
-    }
-
-    // ─── Shared resolution (both paths converge here) ────────────────────────
+    // ─── Shared resolution ────────────────────────────────────────────────────
 
     /**
-     * Given a [host] `PsiLiteralExpression` (the Java string in the `@Query` annotation)
-     * and a resolved [fieldName], navigates to the matching field in the entity class.
+     * Given a [host] element (the injection host `PsiLiteralExpression`) and an [identifier]
+     * extracted from the AQL, resolves either a field in the entity class ([isPropertyAccess]=true)
+     * or an entity class by collection name ([isPropertyAccess]=false).
      */
-    private fun resolveFromHost(host: PsiElement, fieldName: String): Array<PsiElement>? {
+    private fun resolveFromHost(
+        host: PsiElement,
+        identifier: String,
+        isPropertyAccess: Boolean
+    ): Array<PsiElement>? {
         val annotation = PsiTreeUtil.getParentOfType(host, PsiAnnotation::class.java)
             ?: return null
         if (annotation.qualifiedName != QUERY_ANNOTATION) return null
 
-        val method = PsiTreeUtil.getParentOfType(annotation, PsiMethod::class.java)
-            ?: return null
-        val repository = method.containingClass ?: return null
-        val entityClass = resolveEntityClass(repository) ?: return null
-
-        return findEntityField(entityClass, fieldName)
+        return if (isPropertyAccess) {
+            // c.surname → field in entity class
+            val method     = PsiTreeUtil.getParentOfType(annotation, PsiMethod::class.java) ?: return null
+            val repository = method.containingClass ?: return null
+            val entity     = resolveEntityClass(repository) ?: return null
+            findEntityField(entity, identifier)
+        } else {
+            // characters → @Document entity class
+            findDocumentClass(host.project, identifier)
+        }
     }
 
     // ─── Entity-class resolution ──────────────────────────────────────────────
 
     /**
-     * Returns the entity class (first type parameter) from a Spring Data repository.
-     *
-     * For `CharacterRepository extends ArangoRepository<Character, String>`,
-     * this resolves the `Character` class.
-     *
-     * Searches all direct `superTypes` of [cls] and returns the first one whose
-     * first type argument resolves to a concrete `PsiClass`.
+     * Extracts the entity class (first type parameter) from a Spring Data repository.
+     * `CharacterRepository extends ArangoRepository<Character, String>` → `Character`.
      */
     private fun resolveEntityClass(cls: PsiClass): PsiClass? {
         for (superType in cls.superTypes) {
@@ -198,23 +170,91 @@ class SpringDataFieldGotoDeclarationHandler : GotoDeclarationHandler {
     }
 
     /**
-     * Finds the PSI field corresponding to [fieldName] in [entityClass] (and its
-     * superclass hierarchy via `findFieldByName`).
+     * Finds the Java field in [entityClass] (and its superclass hierarchy) matching [fieldName].
      *
-     * Tries:
-     *  1. Direct Java field name match (`Character#surname`)
-     *  2. `@Field("surname")` annotation on a differently-named field
+     * Resolution order:
+     *  1. Direct Java field name
+     *  2. `@Field("fieldName")` annotation on any field
      */
     private fun findEntityField(entityClass: PsiClass, fieldName: String): Array<PsiElement>? {
-        // 1. Direct field name
         entityClass.findFieldByName(fieldName, true)?.let { return arrayOf(it) }
 
-        // 2. @Field annotation value match
-        val annotatedField = entityClass.allFields.firstOrNull { field ->
+        val annotated = entityClass.allFields.firstOrNull { field ->
             field.getAnnotation(FIELD_ANNOTATION)
                 ?.findDeclaredAttributeValue("value")
                 ?.let { (it as? PsiLiteralExpression)?.value as? String } == fieldName
         }
-        return if (annotatedField != null) arrayOf(annotatedField) else null
+        return if (annotated != null) arrayOf(annotated) else null
+    }
+
+    /**
+     * Searches the project for a `@Document`-annotated class whose resolved collection
+     * name equals [collectionName].
+     *
+     * Considers both explicit `@Document("name")` values and the default lower-camelCase
+     * derivation from the class name.
+     */
+    private fun findDocumentClass(project: Project, collectionName: String): Array<PsiElement>? {
+        val annotationClass = JavaPsiFacade.getInstance(project)
+            .findClass(DOCUMENT_ANNOTATION, GlobalSearchScope.allScope(project))
+            ?: return null
+
+        val match = AnnotatedElementsSearch
+            .searchPsiClasses(annotationClass, GlobalSearchScope.projectScope(project))
+            .findAll()
+            .firstOrNull { cls -> resolveDocumentCollectionName(cls) == collectionName }
+            ?: return null
+
+        return arrayOf(match)
+    }
+
+    /**
+     * Returns the ArangoDB collection name for [cls]:
+     *  - explicit `@Document("name")` value if present
+     *  - lower-camelCase class name otherwise (Spring Data ArangoDB default)
+     */
+    private fun resolveDocumentCollectionName(cls: PsiClass): String {
+        val annotation = cls.getAnnotation(DOCUMENT_ANNOTATION)
+        val explicit = annotation
+            ?.findDeclaredAttributeValue("value")
+            ?.let { (it as? PsiLiteralExpression)?.value as? String }
+            ?.takeIf { it.isNotBlank() }
+        return explicit ?: cls.name?.replaceFirstChar { it.lowercaseChar() } ?: ""
+    }
+
+    // ─── Text-analysis helpers (Path B) ───────────────────────────────────────
+
+    /**
+     * Returns the identifier word containing position [pos] in [content], or `null`
+     * if [pos] is not on a word character.
+     */
+    private fun wordAt(content: String, pos: Int): String? {
+        if (pos < 0 || pos >= content.length) return null
+        val c = content[pos]
+        if (!c.isLetterOrDigit() && c != '_') return null
+
+        var start = pos
+        while (start > 0 && (content[start - 1].isLetterOrDigit() || content[start - 1] == '_')) {
+            start--
+        }
+        var end = pos
+        while (end < content.length - 1 &&
+               (content[end + 1].isLetterOrDigit() || content[end + 1] == '_')
+        ) {
+            end++
+        }
+        return content.substring(start, end + 1).takeIf { it.isNotBlank() }
+    }
+
+    /**
+     * Returns `true` if the word that contains [pos] in [content] is immediately
+     * preceded by a `.` character (i.e., it is a property-access expression).
+     */
+    private fun isPrecededByDot(content: String, pos: Int): Boolean {
+        var start = pos
+        while (start > 0 && (content[start - 1].isLetterOrDigit() || content[start - 1] == '_')) {
+            start--
+        }
+        return start > 0 && content[start - 1] == '.'
     }
 }
