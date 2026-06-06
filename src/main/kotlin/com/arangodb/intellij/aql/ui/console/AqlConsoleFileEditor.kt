@@ -7,6 +7,9 @@ import com.arangodb.intellij.aql.services.AqlConsoleStateService
 import com.arangodb.intellij.aql.ui.DataWindowState
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.command.undo.DocumentReference
+import com.intellij.openapi.command.undo.DocumentReferenceManager
+import com.intellij.openapi.command.undo.DocumentReferenceProvider
 import com.intellij.openapi.editor.event.DocumentEvent
 import com.intellij.openapi.editor.event.DocumentListener
 import com.intellij.openapi.fileEditor.FileEditor
@@ -51,7 +54,7 @@ import javax.swing.*
 class AqlConsoleFileEditor(
     private val project: Project,
     private val virtualFile: VirtualFile
-) : FileEditor {
+) : FileEditor, DocumentReferenceProvider {
 
     companion object {
         private val TS_FMT = DateTimeFormatter.ofPattern("HH:mm:ss")
@@ -374,6 +377,19 @@ class AqlConsoleFileEditor(
     override fun setState(state: FileEditorState) {}
     override fun isModified(): Boolean = false
     override fun isValid(): Boolean = !project.isDisposed
+
+    /**
+     * Tells the [com.intellij.openapi.command.undo.UndoManager] that the document
+     * owned by the embedded [editorField] belongs to this file editor.
+     *
+     * Without this, Ctrl+Z is disabled because [UndoManager.isUndoAvailable] checks the
+     * document of [AqlConsoleVirtualFile] (the tab handle, which is never written), while
+     * typing operations are recorded against [LanguageTextField]'s own internal document.
+     * Implementing [DocumentReferenceProvider] bridges the two so that undo/redo work
+     * correctly via IntelliJ's native action system.
+     */
+    override fun getDocumentReferences(): Collection<DocumentReference> =
+        listOf(DocumentReferenceManager.getInstance().create(editorField.document))
 
     override fun dispose() {
         editorField.removeDocumentListener(editorTextListener)
