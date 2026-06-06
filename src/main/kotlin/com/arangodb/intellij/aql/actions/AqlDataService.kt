@@ -212,7 +212,17 @@ class AqlDataService private constructor(private val project: Project) {
         return DefaultTreeModel(root)
     }
 
-    fun populateTree(server: ArangoDbServer): DefaultTreeModel {
+    /**
+     * Clears all persisted server settings and fires a schema-refresh event
+     * so the tool window reverts to its empty state.
+     */
+    fun removeServer(): AqlDataService {
+        stateComponent.loadState(ArangoDbServer())
+        sendEmptyMessage(ActionBusEvent.AQL_SYSTEM_REFRESH_SCHEME)
+        return this
+    }
+
+    fun populateTree(server: ArangoDbServer, includeSystem: Boolean = true): DefaultTreeModel {
         val serverObject = AqlNodeModel(server.name, server.host, AqlNodeModel.Type.SERVER)
         val root = CheckedTreeNode(serverObject).also { it.isChecked = true }
         val selectedDatabase = server.selectedDatabase ?: ArangoDbDatabase()
@@ -255,7 +265,8 @@ class AqlDataService private constructor(private val project: Project) {
                 dbNode.add(node)
             }
             // A4: System collections grouped under a collapsible "System (N)" folder
-            val sysEntities = collections.filter { (it.name ?: "").startsWith("_") }
+            // (omitted entirely when includeSystem = false, e.g. B4 toolbar toggle)
+            val sysEntities = if (includeSystem) collections.filter { (it.name ?: "").startsWith("_") } else emptyList()
             if (sysEntities.isNotEmpty()) {
                 val sysModel = AqlNodeModel("", "System (${sysEntities.size})", AqlNodeModel.Type.CATEGORY)
                 val sysNode = CheckedTreeNode().also { it.userObject = sysModel }
