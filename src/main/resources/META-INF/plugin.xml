@@ -116,6 +116,29 @@
 
       <!--
         //############################################
+        // Spring Data ArangoDB integration
+        // Requires: com.intellij.modules.java (declared above)
+        //############################################
+      -->
+      <!-- Gutter icons on @Document classes (browse collection) and @Query methods (load in console) -->
+      <codeInsight.lineMarkerProvider language="JAVA"
+          implementationClass="com.arangodb.intellij.aql.spring.SpringDataLineMarkerProvider"/>
+
+      <!-- Warns when @Document references a collection that doesn't exist in the active database -->
+      <localInspection language="JAVA"
+                       shortName="AqlSpringDataDocumentCollection"
+                       displayName="@Document references unknown ArangoDB collection"
+                       groupName="AQL"
+                       enabledByDefault="true"
+                       level="WEAK WARNING"
+                       implementationClass="com.arangodb.intellij.aql.spring.SpringDataDocumentInspection"/>
+
+      <!-- Completes ArangoDB collection names inside @Document("...") -->
+      <completion.contributor language="JAVA"
+          implementationClass="com.arangodb.intellij.aql.spring.SpringDataCompletionContributor"/>
+
+      <!--
+        //############################################
         // Services
         //############################################
       -->

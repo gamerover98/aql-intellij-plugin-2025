@@ -13,6 +13,8 @@ fun interface ActionBusEvent {
         @JvmField val AQL_SYSTEM_EMPTY_LOG: Topic<ActionBusEvent> = Topic.create("AQL.System.EmptyLog", ActionBusEvent::class.java)
         @JvmField val AQL_SYSTEM_REFRESH_SCHEME: Topic<ActionBusEvent> = Topic.create("AQL.System.RefreshScheme", ActionBusEvent::class.java)
         @JvmField val AQL_SYSTEM_ACTIVE_DATABASE_SET: Topic<ActionBusEvent> = Topic.create("AQL.System.SetDatabase", ActionBusEvent::class.java)
+        /** Sent by Spring Data line markers to pre-fill the AQL Console editor with a query text. */
+        @JvmField val AQL_CONSOLE_LOAD_QUERY: Topic<ActionBusEvent> = Topic.create("AQL.Console.LoadQuery", ActionBusEvent::class.java)
     }
 
     fun onEvent(data: ActionEventData)

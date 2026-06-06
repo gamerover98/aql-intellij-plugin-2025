@@ -1,67 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component name="LanguageInjectionConfiguration">
+  <!--
+    Injects AQL language into the value() attribute of Spring Data ArangoDB's @Query annotation.
+    This enables AQL syntax highlighting, completion, and inspections inside @Query strings:
+      @Query("FOR c IN characters FILTER c.surname == @surname RETURN c")
+
+    NOTE: Only @Query.value is injected here. Other Spring Data annotations such as @Document,
+    @Field, and index annotations (@PersistentIndex, @HashIndex, etc.) contain collection or
+    field names — plain strings, NOT AQL — and are intentionally NOT injected to avoid false
+    parse errors. Collection name completion for @Document is handled by
+    SpringDataCompletionContributor instead.
+  -->
   <injection language="AQL" injector-id="java">
-    <display-name>ArangoDB AQL Spring Data Query Injection</display-name>
+    <display-name>ArangoDB AQL — @Query value</display-name>
     <place>
       <![CDATA[
       psiMethod().withName("value").withParameters().definedInClass("com.arangodb.springframework.annotation.Query")
       ]]>
-        </place>
-  </injection>
-  <injection language="AQL" injector-id="java">
-    <display-name>ArangoDB AQL Spring Data Query Injection</display-name>
-    <place>
-      <![CDATA[
-      psiMethod().withName("value").withParameters().definedInClass("com.arangodb.springframework.annotation.Document")
-      ]]>
-        </place>
-  </injection>
-  <injection language="AQL" injector-id="java">
-    <display-name>ArangoDB AQL Spring Data Query Injection</display-name>
-    <place>
-      <![CDATA[
-      psiMethod().withName("fields").withParameters().definedInClass("com.arangodb.springframework.annotation.HashIndex")
-      ]]>
-        </place>
-  </injection>
-  <injection language="AQL" injector-id="java">
-    <display-name>ArangoDB AQL Spring Data Query Injection</display-name>
-    <place>
-      <![CDATA[
-      psiMethod().withName("fields").withParameters().definedInClass("com.arangodb.springframework.annotation.GeoIndex")
-      ]]>
-        </place>
-  </injection>
-  <injection language="AQL" injector-id="java">
-    <display-name>ArangoDB AQL Spring Data Query Injection</display-name>
-    <place>
-      <![CDATA[
-      psiMethod().withName("fields").withParameters().definedInClass("com.arangodb.springframework.annotation.PersistentIndex")
-      ]]>
-        </place>
-  </injection>
-  <injection language="AQL" injector-id="java">
-    <display-name>ArangoDB AQL Spring Data Query Injection</display-name>
-    <place>
-      <![CDATA[
-      psiMethod().withName("fields").withParameters().definedInClass("com.arangodb.springframework.annotation.SkiplistIndex")
-      ]]>
-        </place>
-  </injection>
-  <injection language="AQL" injector-id="java">
-    <display-name>ArangoDB AQL Spring Data Query Injection</display-name>
-    <place>
-      <![CDATA[
-      psiMethod().withName("value").withParameters().definedInClass("com.arangodb.springframework.annotation.Field")
-      ]]>
-        </place>
-  </injection>
-  <injection language="AQL" injector-id="java">
-    <display-name>ArangoDB AQL Spring Data Query Injection</display-name>
-    <place>
-      <![CDATA[
-      psiMethod().withName("field").withParameters().definedInClass("com.arangodb.springframework.annotation.FulltextIndex")
-      ]]>
-        </place>
+    </place>
   </injection>
 </component>

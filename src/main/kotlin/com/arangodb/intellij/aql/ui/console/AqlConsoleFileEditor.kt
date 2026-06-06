@@ -219,6 +219,12 @@ class AqlConsoleFileEditor(
         busConnection.subscribe(ActionBusEvent.AQL_SYSTEM_ACTIVE_DATABASE_SET, ActionBusEvent { _ ->
             populateDatabaseSelector()
         })
+        // Pre-fill editor with a query sent by Spring Data line markers (@Query gutter icon)
+        busConnection.subscribe(ActionBusEvent.AQL_CONSOLE_LOAD_QUERY, ActionBusEvent { data ->
+            val query = data.get(com.arangodb.intellij.aql.actions.ActionEventData.KEY_QUERY)
+                ?: return@ActionBusEvent
+            SwingUtilities.invokeLater { editorField.text = query }
+        })
     }
 
     // ─── Actions ──────────────────────────────────────────────────────────────
