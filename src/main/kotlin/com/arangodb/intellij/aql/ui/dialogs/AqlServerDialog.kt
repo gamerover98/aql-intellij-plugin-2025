@@ -66,7 +66,24 @@ class AqlServerDialog(private val project: Project) : DialogWrapper(project) {
         }
     }
 
-    override fun doValidate(): ValidationInfo? = null
+    /**
+     * C4: Validates the dialog fields before the OK button is enabled.
+     *  - Host must not be blank.
+     *  - Port must be in the valid TCP range 1–65535.
+     *  - Username must not be blank.
+     */
+    override fun doValidate(): ValidationInfo? {
+        val host = hostText?.text?.trim() ?: ""
+        if (host.isBlank()) return ValidationInfo("Host cannot be empty", hostText)
+
+        val port = portSpinner?.number ?: 0
+        if (port !in 1..65535) return ValidationInfo("Port must be between 1 and 65535", portSpinner)
+
+        val user = userText?.text?.trim() ?: ""
+        if (user.isBlank()) return ValidationInfo("Username cannot be empty", userText)
+
+        return null
+    }
 
     override fun createCenterPanel(): JComponent? = panel
 

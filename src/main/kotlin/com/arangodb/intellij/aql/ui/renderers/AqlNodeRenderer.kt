@@ -69,7 +69,16 @@ class AqlNodeRenderer : ColoredTreeCellRenderer() {
 
     // ─── Helpers ─────────────────────────────────────────────────────────────
 
+    /**
+     * A6: Build tooltip text.
+     * - When [AqlNodeModel.tooltipLines] is populated (SERVER/DATABASE) → HTML multi-line.
+     * - For COLLECTION/EDGE with a loaded count → plain "Type — N documents".
+     * - Otherwise → just the type label.
+     */
     private fun buildTooltip(model: AqlNodeModel): String {
+        if (model.tooltipLines.isNotEmpty()) {
+            return "<html>${model.tooltipLines.joinToString("<br>")}</html>"
+        }
         val typeLabel = model.type.name
             .lowercase()
             .replaceFirstChar { it.uppercaseChar() }

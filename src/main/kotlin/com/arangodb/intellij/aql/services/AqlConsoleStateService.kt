@@ -35,6 +35,13 @@ class AqlConsoleStateService : PersistentStateComponent<AqlConsoleStateService.S
         var editorText: String = ""
         var history: MutableList<HistoryItem> = mutableListOf()
         var lastResult: String = ""
+        /**
+         * B5: Stable expansion paths for the ArangoDB connection tree.
+         * Each entry is the node path from root to a previously expanded node,
+         * with path components joined by "›" and count suffixes (e.g. " (5)")
+         * stripped so the saved state survives schema changes.
+         */
+        var treeExpandedPaths: MutableList<String> = mutableListOf()
     }
 
     private var myState = State()

@@ -3,6 +3,7 @@ package com.arangodb.intellij.aql.toolWindow
 import com.arangodb.intellij.aql.ArangoBundle
 import com.arangodb.intellij.aql.actions.ActionBusEvent
 import com.arangodb.intellij.aql.actions.AqlDataService
+import com.arangodb.intellij.aql.services.AqlConsoleStateService
 import com.arangodb.intellij.aql.services.ArangoProjectService
 import com.arangodb.intellij.aql.ui.DataWindowState
 import com.arangodb.intellij.aql.ui.actions.*
@@ -39,6 +40,8 @@ import java.awt.event.KeyAdapter
 import java.awt.event.KeyEvent
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 import javax.swing.BorderFactory
 import javax.swing.JLabel
 import javax.swing.JMenuItem
@@ -48,6 +51,8 @@ import javax.swing.SwingConstants
 import javax.swing.SwingUtilities
 import javax.swing.event.DocumentEvent
 import javax.swing.event.DocumentListener
+import javax.swing.event.TreeExpansionEvent
+import javax.swing.event.TreeExpansionListener
 import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.DefaultTreeModel
 
@@ -66,6 +71,13 @@ import javax.swing.tree.DefaultTreeModel
  *  - B3: Live filter field above the tree
  *  - B4: "System Collections" toggle button to show/hide the system folder
  *  - B6: Ctrl+C copies the selected node's name to the clipboard
+ *
+ * Sprint 3 features:
+ *  - A3: Virtual category folders (Collections, Edge Collections, Graphs, Views)
+ *  - A6: Rich HTML hover tooltips on SERVER and DATABASE nodes
+ *  - A8: "Last refreshed HH:mm:ss" appended to the connected status bar
+ *  - B5: Tree expansion state persisted across IDE restarts via AqlConsoleStateService
+ *  - B7: "Open in Console" on DATABASE sets that DB as active before switching tabs
  */
 class ServerToolWindow(private val project: Project) : Disposable {
 
@@ -90,6 +102,10 @@ class ServerToolWindow(private val project: Project) : Disposable {
     // ─── B4: System collections toggle ────────────────────────────────────────
 
     private var showSystemCollections = true
+
+    // ─── A8: Last successful refresh timestamp ────────────────────────────────
+
+    private var lastRefreshTime: LocalTime? = null
 
     // ─── A1: Status bar ───────────────────────────────────────────────────────
 
@@ -207,6 +223,12 @@ class ServerToolWindow(private val project: Project) : Disposable {
             }
         })
 
+        // B5: Persist expansion state across IDE restarts
+        schemaTree.addTreeExpansionListener(object : TreeExpansionListener {
+            override fun treeExpanded(event: TreeExpansionEvent)  { saveExpandedPaths() }
+            override fun treeCollapsed(event: TreeExpansionEvent) { saveExpandedPaths() }
+        })
+
         // B6: Ctrl+C copies the selected node's display name
         schemaTree.addKeyListener(object : KeyAdapter() {
             override fun keyPressed(e: KeyEvent) {
@@ -257,6 +279,7 @@ class ServerToolWindow(private val project: Project) : Disposable {
 
         if (text.isBlank()) {
             schemaTree.model = model
+            restoreExpandedPaths()  // B5: bring back previously expanded nodes
             return
         }
 
@@ -324,6 +347,7 @@ class ServerToolWindow(private val project: Project) : Disposable {
         applyFilter()   // respect any active search text
 
         if (server.databases.isNotEmpty()) {
+            lastRefreshTime = LocalTime.now()   // A8
             val state = project.getService(DataWindowState::class.java).state
             setStatus(ConnectionState.CONNECTED, "${state.host}:${state.port}")
             loadCountsAsync(treeModel)
@@ -368,7 +392,11 @@ class ServerToolWindow(private val project: Project) : Disposable {
                 })
                 menu.addSeparator()
                 menu.add(JMenuItem("Open in Console", AllIcons.Actions.Execute).apply {
-                    addActionListener { openInConsole() }
+                    // B7: set DB as active first so the console uses the right database
+                    addActionListener {
+                        AqlDataService.with(project).setActiveDatabase(model)
+                        openInConsole()
+                    }
                 })
                 menu.add(JMenuItem("Copy Name", AllIcons.Actions.Copy).apply {
                     addActionListener { toClipboard(model.displayName ?: "") }
@@ -444,8 +472,13 @@ class ServerToolWindow(private val project: Project) : Disposable {
                 statusLabel.foreground = JBColor.GRAY
             }
             ConnectionState.CONNECTED -> {
-                val suffix = if (!detail.isNullOrEmpty()) "  —  $detail" else ""
-                statusLabel.text = "  ● Connected$suffix"
+                val parts = mutableListOf("  ● Connected")
+                if (!detail.isNullOrEmpty()) parts.add(detail)
+                // A8: append last-refresh timestamp
+                lastRefreshTime?.let {
+                    parts.add("refreshed ${it.format(DateTimeFormatter.ofPattern("HH:mm:ss"))}")
+                }
+                statusLabel.text = parts.joinToString("  —  ")
                 statusLabel.foreground = JBColor(Color(0x2E7D32), Color(0x66BB6A))
             }
             ConnectionState.ERROR -> {
@@ -459,8 +492,9 @@ class ServerToolWindow(private val project: Project) : Disposable {
 
     /**
      * Off the EDT: fetches document counts for every COLLECTION/EDGE node in the
-     * active database and calls [DefaultTreeModel.nodeChanged] on the EDT so the
-     * renderer repaints individual rows without a full tree rebuild.
+     * active database (recursing into CATEGORY sub-folders added by A3) and calls
+     * [DefaultTreeModel.nodeChanged] on the EDT so the renderer repaints individual
+     * rows without a full tree rebuild.
      */
     private fun loadCountsAsync(treeModel: DefaultTreeModel) {
         val service = AqlDataService.with(project)
@@ -470,22 +504,76 @@ class ServerToolWindow(private val project: Project) : Disposable {
                 val dbNode  = root.getChildAt(i) as? DefaultMutableTreeNode ?: continue
                 val dbModel = dbNode.userObject as? AqlNodeModel ?: continue
                 if (!dbModel.isSelected) continue
-
-                for (j in 0 until dbNode.childCount) {
-                    val colNode  = dbNode.getChildAt(j) as? DefaultMutableTreeNode ?: continue
-                    val colModel = colNode.userObject as? AqlNodeModel ?: continue
-                    if (colModel.type != AqlNodeModel.Type.COLLECTION &&
-                        colModel.type != AqlNodeModel.Type.EDGE) continue
-                    val colName = colModel.displayName ?: continue
-
-                    val count = try { service.getCollectionCount(colName) } catch (_: Exception) { -1L }
-                    if (count >= 0) {
-                        colModel.count = count
-                        SwingUtilities.invokeLater { treeModel.nodeChanged(colNode) }
-                    }
-                }
+                loadCountsForNode(dbNode, service, treeModel)
                 break
             }
+        }
+    }
+
+    /**
+     * Recursive helper for [loadCountsAsync]: loads counts for COLLECTION/EDGE nodes
+     * and dives into CATEGORY folders (A3 virtual folders + System folder).
+     */
+    private fun loadCountsForNode(
+        node: DefaultMutableTreeNode,
+        service: AqlDataService,
+        treeModel: DefaultTreeModel
+    ) {
+        for (i in 0 until node.childCount) {
+            val child      = node.getChildAt(i) as? DefaultMutableTreeNode ?: continue
+            val childModel = child.userObject as? AqlNodeModel ?: continue
+            when (childModel.type) {
+                AqlNodeModel.Type.COLLECTION, AqlNodeModel.Type.EDGE -> {
+                    val colName = childModel.displayName ?: continue
+                    val count   = try { service.getCollectionCount(colName) } catch (_: Exception) { -1L }
+                    if (count >= 0) {
+                        childModel.count = count
+                        SwingUtilities.invokeLater { treeModel.nodeChanged(child) }
+                    }
+                }
+                AqlNodeModel.Type.CATEGORY -> loadCountsForNode(child, service, treeModel)
+                else -> { /* SERVER/DATABASE/GRAPH/VIEW — no count to load */ }
+            }
+        }
+    }
+
+    // ─── B5: Expansion-state persistence ─────────────────────────────────────
+
+    /**
+     * Builds a stable path key for [node] by joining each ancestor's label
+     * (with count suffixes like " (5)" stripped) using "›" as separator.
+     * E.g. "127.0.0.1›mydb›Collections" — survives schema size changes.
+     */
+    private fun pathKey(node: DefaultMutableTreeNode): String =
+        node.path.joinToString("›") { treeNode ->
+            val m   = (treeNode as? DefaultMutableTreeNode)?.userObject as? AqlNodeModel
+            val raw = m?.displayName?.takeIf { it.isNotBlank() } ?: m?.name ?: treeNode.toString()
+            raw.replace(Regex("\\s*\\(\\d+\\)$"), "")
+        }
+
+    /** Saves the set of currently expanded node paths to [AqlConsoleStateService]. */
+    private fun saveExpandedPaths() {
+        val expanded = mutableListOf<String>()
+        for (row in 0 until schemaTree.rowCount) {
+            if (!schemaTree.isExpanded(row)) continue
+            val path = schemaTree.getPathForRow(row) ?: continue
+            val node = path.lastPathComponent as? DefaultMutableTreeNode ?: continue
+            expanded.add(pathKey(node))
+        }
+        AqlConsoleStateService.getInstance(project).state.treeExpandedPaths = expanded
+    }
+
+    /**
+     * Expands all nodes whose [pathKey] matches a previously saved path.
+     * Called by [applyFilter] when the filter is blank (full model shown).
+     */
+    private fun restoreExpandedPaths() {
+        val saved = AqlConsoleStateService.getInstance(project).state.treeExpandedPaths
+        if (saved.isEmpty()) return
+        for (row in 0 until schemaTree.rowCount) {
+            val path = schemaTree.getPathForRow(row) ?: continue
+            val node = path.lastPathComponent as? DefaultMutableTreeNode ?: continue
+            if (pathKey(node) in saved) schemaTree.expandRow(row)
         }
     }
 

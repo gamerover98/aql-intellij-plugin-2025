@@ -20,6 +20,14 @@ class AqlNodeModel @JvmOverloads constructor(
      */
     var count: Long? = null
 
+    /**
+     * A6: Optional rich tooltip lines rendered as HTML on hover.
+     * When non-empty the renderer shows `<html>line1<br>line2…</html>`.
+     * Populated by [com.arangodb.intellij.aql.actions.AqlDataService.populateTree]
+     * for SERVER and DATABASE nodes.
+     */
+    var tooltipLines: List<String> = emptyList()
+
     fun getIcon(): Icon = when (type) {
         Type.SERVER     -> Icons.ICON_ARANGO_SMALL
         Type.DATABASE   -> Icons.ICON_DATABASE

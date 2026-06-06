@@ -222,62 +222,121 @@ class AqlDataService private constructor(private val project: Project) {
         return this
     }
 
+    /**
+     * Builds the full tree model for [server].
+     *
+     * A3: Each database shows four optional virtual category folders:
+     *   "Collections (N)", "Edge Collections (N)", "Graphs (N)", "Views (N)"
+     *   — folders with 0 items are omitted.
+     * A4: System collections (`_` prefix) are grouped in a "System (N)" folder
+     *   (omitted entirely when [includeSystem] = false, e.g. the B4 toolbar toggle).
+     * A6: SERVER and DATABASE nodes carry [AqlNodeModel.tooltipLines] for rich hover tooltips.
+     */
     fun populateTree(server: ArangoDbServer, includeSystem: Boolean = true): DefaultTreeModel {
-        val serverObject = AqlNodeModel(server.name, server.host, AqlNodeModel.Type.SERVER)
+        // A6: SERVER tooltip — host:port, user, SSL, database count
+        val serverObject = AqlNodeModel(server.name, server.host, AqlNodeModel.Type.SERVER).also {
+            it.tooltipLines = buildList {
+                add("<b>${server.host}:${server.port}</b>")
+                val user = server.user
+                if (!user.isNullOrEmpty()) add("User: $user")
+                add(if (server.isUseSsl) "SSL: enabled" else "SSL: disabled")
+                val dbCount = server.databases.size
+                if (dbCount > 0) add("Databases: $dbCount")
+            }
+        }
         val root = CheckedTreeNode(serverObject).also { it.isChecked = true }
         val selectedDatabase = server.selectedDatabase ?: ArangoDbDatabase()
 
         for (database in server.databases) {
+            val collections   = database.collections ?: emptyList()
+            val regularCols   = collections.filter { it.type != CollectionType.EDGES && !(it.name ?: "").startsWith("_") }
+            val edgeCols      = collections.filter { it.type == CollectionType.EDGES  && !(it.name ?: "").startsWith("_") }
+            val graphs        = database.graphs ?: emptyList()
+            val views         = database.views  ?: emptyList()
+            val sysCols       = if (includeSystem) collections.filter { (it.name ?: "").startsWith("_") } else emptyList()
+
+            // A6: DATABASE tooltip — name, per-category counts
             val dbObject = AqlNodeModel(database.name, database.name, AqlNodeModel.Type.DATABASE).also {
                 if (selectedDatabase == database) it.isSelected = true
+                it.tooltipLines = buildList {
+                    add("<b>${database.name ?: ""}</b>")
+                    if (regularCols.isNotEmpty()) add("Collections: ${regularCols.size}")
+                    if (edgeCols.isNotEmpty())    add("Edge Collections: ${edgeCols.size}")
+                    if (graphs.isNotEmpty())      add("Graphs: ${graphs.size}")
+                    if (views.isNotEmpty())       add("Views: ${views.size}")
+                    if (sysCols.isNotEmpty())     add("System: ${sysCols.size}")
+                }
             }
             val dbNode = CheckedTreeNode().also { it.userObject = dbObject }
             root.add(dbNode)
 
-            val collections = database.collections ?: emptyList()
+            // A3: "Collections (N)" folder
+            if (regularCols.isNotEmpty()) {
+                val catNode = CheckedTreeNode().also {
+                    it.userObject = AqlNodeModel("", "Collections (${regularCols.size})", AqlNodeModel.Type.CATEGORY)
+                }
+                dbNode.add(catNode)
+                for (entity in regularCols) {
+                    val entityName = entity.name ?: continue
+                    catNode.add(CheckedTreeNode().also {
+                        it.userObject = AqlNodeModel("", entityName, AqlNodeModel.Type.COLLECTION)
+                    })
+                }
+            }
 
-            // Regular (non-edge, non-system) collections
-            for (entity in collections) {
-                if (entity.type == CollectionType.EDGES) continue
-                val entityName = entity.name ?: continue
-                if (entityName.startsWith("_")) continue
-                val node = CheckedTreeNode()
-                node.userObject = AqlNodeModel("", entityName, AqlNodeModel.Type.COLLECTION)
-                dbNode.add(node)
+            // A3: "Edge Collections (N)" folder
+            if (edgeCols.isNotEmpty()) {
+                val catNode = CheckedTreeNode().also {
+                    it.userObject = AqlNodeModel("", "Edge Collections (${edgeCols.size})", AqlNodeModel.Type.CATEGORY)
+                }
+                dbNode.add(catNode)
+                for (entity in edgeCols) {
+                    val entityName = entity.name ?: continue
+                    catNode.add(CheckedTreeNode().also {
+                        it.userObject = AqlNodeModel("", entityName, AqlNodeModel.Type.EDGE)
+                    })
+                }
             }
-            // Edge collections (non-system) — properly typed as EDGE
-            for (entity in collections) {
-                if (entity.type != CollectionType.EDGES) continue
-                val entityName = entity.name ?: continue
-                if (entityName.startsWith("_")) continue
-                val node = CheckedTreeNode()
-                node.userObject = AqlNodeModel("", entityName, AqlNodeModel.Type.EDGE)
-                dbNode.add(node)
+
+            // A3: "Graphs (N)" folder
+            if (graphs.isNotEmpty()) {
+                val catNode = CheckedTreeNode().also {
+                    it.userObject = AqlNodeModel("", "Graphs (${graphs.size})", AqlNodeModel.Type.CATEGORY)
+                }
+                dbNode.add(catNode)
+                for (entity in graphs) {
+                    catNode.add(CheckedTreeNode().also {
+                        it.userObject = AqlNodeModel("", entity.name, AqlNodeModel.Type.GRAPH)
+                    })
+                }
             }
-            for (entity in database.graphs ?: emptyList()) {
-                val node = CheckedTreeNode()
-                node.userObject = AqlNodeModel("", entity.name, AqlNodeModel.Type.GRAPH)
-                dbNode.add(node)
+
+            // A3: "Views (N)" folder
+            if (views.isNotEmpty()) {
+                val catNode = CheckedTreeNode().also {
+                    it.userObject = AqlNodeModel("", "Views (${views.size})", AqlNodeModel.Type.CATEGORY)
+                }
+                dbNode.add(catNode)
+                for (entity in views) {
+                    catNode.add(CheckedTreeNode().also {
+                        it.userObject = AqlNodeModel("", entity.name, AqlNodeModel.Type.VIEW)
+                    })
+                }
             }
-            for (entity in database.views ?: emptyList()) {
-                val node = CheckedTreeNode()
-                node.userObject = AqlNodeModel("", entity.name, AqlNodeModel.Type.VIEW)
-                dbNode.add(node)
-            }
-            // A4: System collections grouped under a collapsible "System (N)" folder
-            // (omitted entirely when includeSystem = false, e.g. B4 toolbar toggle)
-            val sysEntities = if (includeSystem) collections.filter { (it.name ?: "").startsWith("_") } else emptyList()
-            if (sysEntities.isNotEmpty()) {
-                val sysModel = AqlNodeModel("", "System (${sysEntities.size})", AqlNodeModel.Type.CATEGORY)
-                val sysNode = CheckedTreeNode().also { it.userObject = sysModel }
+
+            // A4: "System (N)" folder — omitted when includeSystem = false
+            if (sysCols.isNotEmpty()) {
+                val sysNode = CheckedTreeNode().also {
+                    it.userObject = AqlNodeModel("", "System (${sysCols.size})", AqlNodeModel.Type.CATEGORY)
+                }
                 dbNode.add(sysNode)
-                for (entity in sysEntities) {
+                for (entity in sysCols) {
                     val entityName = entity.name ?: continue
                     val colType = if (entity.type == CollectionType.EDGES) AqlNodeModel.Type.EDGE
                                   else AqlNodeModel.Type.COLLECTION
-                    val node = CheckedTreeNode()
-                    node.userObject = AqlNodeModel("", entityName, colType)
-                    sysNode.add(node)
+                    sysNode.add(CheckedTreeNode().also {
+                        it.userObject = AqlNodeModel("", entityName, colType)
+                    })
                 }
             }
         }
