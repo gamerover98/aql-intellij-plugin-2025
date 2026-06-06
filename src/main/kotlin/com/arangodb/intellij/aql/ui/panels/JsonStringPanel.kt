@@ -1,0 +1,69 @@
+package com.arangodb.intellij.aql.ui.panels
+
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.intellij.icons.AllIcons
+import com.intellij.ui.JBColor
+import com.intellij.ui.components.JBScrollPane
+import com.intellij.util.ui.JBUI
+import java.awt.BorderLayout
+import java.awt.FlowLayout
+import java.awt.Font
+import java.awt.Toolkit
+import java.awt.datatransfer.StringSelection
+import javax.swing.JButton
+import javax.swing.JPanel
+import javax.swing.JTextArea
+
+/**
+ * Displays the raw AQL query result as a compact, escaped JSON string —
+ * suitable for pasting directly into Java/Kotlin/JavaScript code.
+ *
+ * Example output:
+ *   "[{\"_id\":\"chars/1\",\"name\":\"Ned\"}]"
+ */
+class JsonStringPanel : JPanel(BorderLayout()) {
+
+    private val mapper = ObjectMapper()
+    private val textArea = JTextArea()
+
+    init {
+        background = JBColor.background()
+
+        textArea.isEditable = false
+        textArea.lineWrap = true
+        textArea.wrapStyleWord = false
+        textArea.font = JBUI.Fonts.create(Font.MONOSPACED, JBUI.Fonts.label().size)
+        textArea.background = JBColor.background()
+        textArea.foreground = JBColor.foreground()
+        textArea.border = JBUI.Borders.empty(6, 8)
+
+        val copyBtn = JButton("Copy", AllIcons.Actions.Copy).apply {
+            toolTipText = "Copy the string to clipboard"
+            addActionListener { copyToClipboard(textArea.text) }
+        }
+
+        val toolbar = JPanel(FlowLayout(FlowLayout.LEFT, 4, 2)).apply {
+            border = JBUI.Borders.customLine(JBColor.border(), 0, 0, 1, 0)
+            add(copyBtn)
+        }
+
+        add(toolbar, BorderLayout.NORTH)
+        add(JBScrollPane(textArea), BorderLayout.CENTER)
+    }
+
+    fun setData(json: String) {
+        if (json.isBlank()) { textArea.text = ""; return }
+        val compact = try {
+            mapper.writeValueAsString(mapper.readTree(json))
+        } catch (_: Exception) { json }
+        // Escape backslashes and double-quotes, wrap in outer quotes
+        val escaped = compact.replace("\\", "\\\\").replace("\"", "\\\"")
+        textArea.text = "\"$escaped\""
+        textArea.caretPosition = 0
+    }
+
+    fun clear() { textArea.text = "" }
+
+    private fun copyToClipboard(text: String) =
+        Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null)
+}

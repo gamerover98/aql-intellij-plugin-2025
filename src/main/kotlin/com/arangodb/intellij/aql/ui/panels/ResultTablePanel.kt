@@ -1,6 +1,7 @@
 package com.arangodb.intellij.aql.ui.panels
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.intellij.icons.AllIcons
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.project.Project
@@ -15,13 +16,26 @@ import java.awt.BorderLayout
 import java.awt.Color
 import java.awt.Component
 import java.awt.Cursor
+import java.awt.FlowLayout
 import java.awt.Font
+import java.awt.Toolkit
+import java.awt.datatransfer.StringSelection
+import java.awt.event.InputEvent
+import java.awt.event.KeyEvent
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
+import javax.swing.AbstractAction
+import javax.swing.JButton
 import javax.swing.JLabel
+import javax.swing.JMenuItem
 import javax.swing.JPanel
+import javax.swing.JPopupMenu
+import javax.swing.JSeparator
 import javax.swing.JTable
+import javax.swing.KeyStroke
+import javax.swing.ListSelectionModel
 import javax.swing.SwingConstants
+import javax.swing.SwingUtilities
 import javax.swing.table.DefaultTableCellRenderer
 import javax.swing.table.DefaultTableModel
 import javax.swing.table.TableRowSorter
@@ -29,59 +43,120 @@ import javax.swing.table.TableRowSorter
 /**
  * Tabular view for AQL query results.
  *
- * - Derives columns from the union of all JSON-object fields in the result array.
- * - Metadata fields (_id, _key, _rev, _from, _to, _class) are pinned to the left.
- * - `_class` column values render as clickable hyperlinks that navigate to the
- *   matching Java/Kotlin class in the project.
- * - Columns are sortable by clicking the header.
+ * Features:
+ *  - `_class` always first column: shows only the simple class name; tooltip and the
+ *    status bar below the table show the full FQN when the cell is selected.
+ *    Double-click navigates to the matching .java/.kt source file.
+ *  - Metadata fields (_class, _id, _key, _rev, _from, _to) pinned left; other
+ *    fields follow alphabetically.
+ *  - Columns auto-sized to content; last column stretches to fill remaining space.
+ *  - Single-cell selection; Ctrl+C copies the cell value.
+ *  - Toolbar: Copy Row | Copy JSON | Copy as String.
+ *  - Right-click context menu: Copy Cell, Copy Row as JSON, Copy All as JSON,
+ *    Copy All as String, (Navigate to Class for _class cells).
  */
 class ResultTablePanel(private val project: Project) : JPanel(BorderLayout()) {
 
-    /** ArangoDB metadata keys pinned to the left of the column list. */
-    private val META_KEYS = listOf("_id", "_key", "_rev", "_from", "_to", "_class")
+    /** Pinned metadata columns — _class always first. */
+    private val META_KEYS = listOf("_class", "_id", "_key", "_rev", "_from", "_to")
+
+    private val mapper = ObjectMapper()
+    private var lastRawJson = ""
+
+    // ─── Model & table ────────────────────────────────────────────────────────
 
     private val tableModel = object : DefaultTableModel() {
         override fun isCellEditable(row: Int, column: Int) = false
         override fun getColumnClass(col: Int) = String::class.java
     }
-    private val table = JBTable(tableModel)
-    private val mapper = ObjectMapper()
+
+    /**
+     * Table that:
+     *  - tracks the viewport width (fills horizontally) when columns fit;
+     *  - shows a per-cell tooltip with the full FQN for _class cells.
+     */
+    private val table = object : JBTable(tableModel) {
+        override fun getToolTipText(e: MouseEvent): String? {
+            val row = rowAtPoint(e.point)
+            val col = columnAtPoint(e.point)
+            if (row < 0 || col < 0) return super.getToolTipText(e)
+            val colName = columnModel.getColumn(col).headerValue as? String
+                ?: return super.getToolTipText(e)
+            if (colName != "_class") return super.getToolTipText(e)
+            val modelRow = convertRowIndexToModel(row)
+            return (model.getValueAt(modelRow, col) as? String)?.takeIf { it.isNotBlank() }
+                ?: super.getToolTipText(e)
+        }
+    }
+
+    // ─── Status label (shows full _class FQN on cell selection) ──────────────
+
+    private val statusLabel = JLabel(" ").apply {
+        border = JBUI.Borders.empty(2, 8)
+        foreground = JBColor.GRAY
+        font = font.deriveFont(Font.ITALIC, (font.size - 1).toFloat())
+        horizontalAlignment = SwingConstants.LEFT
+    }
+
+    // ─── Init ─────────────────────────────────────────────────────────────────
 
     init {
         background = JBColor.background()
 
-        table.autoResizeMode = JTable.AUTO_RESIZE_OFF
+        // Table settings
+        table.autoResizeMode = JTable.AUTO_RESIZE_LAST_COLUMN
         table.fillsViewportHeight = true
         table.rowHeight = JBUI.scale(22)
         table.setDefaultRenderer(String::class.java, ClassAwareCellRenderer())
         table.rowSorter = TableRowSorter(tableModel)
 
-        // _class click → navigate; cursor feedback on hover
-        val mouseHandler = object : MouseAdapter() {
+        // Single-cell selection
+        table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION)
+        table.cellSelectionEnabled = true
+
+        // Ctrl+C → copy cell value
+        table.actionMap.put("copy", object : AbstractAction() {
+            override fun actionPerformed(e: java.awt.event.ActionEvent) = copySelectedCell()
+        })
+        table.getInputMap(JTable.WHEN_FOCUSED).put(
+            KeyStroke.getKeyStroke(KeyEvent.VK_C, InputEvent.CTRL_DOWN_MASK), "copy"
+        )
+
+        // Right-click: pre-select cell, then show context menu
+        table.addMouseListener(object : MouseAdapter() {
+            override fun mousePressed(e: MouseEvent) {
+                if (SwingUtilities.isRightMouseButton(e)) preselectCell(e)
+            }
             override fun mouseClicked(e: MouseEvent) {
-                val row = table.rowAtPoint(e.point)
-                val col = table.columnAtPoint(e.point)
-                if (row < 0 || col < 0) return
-                val colName = table.columnModel.getColumn(col).headerValue as? String ?: return
-                if (colName != "_class") return
-                val modelRow = table.convertRowIndexToModel(row)
-                val value = tableModel.getValueAt(modelRow, col) as? String ?: return
-                navigateToClass(value)
+                if (SwingUtilities.isLeftMouseButton(e) && e.clickCount == 2) {
+                    onDoubleClick(e)
+                }
             }
             override fun mouseMoved(e: MouseEvent) = updateCursor(e)
-        }
-        table.addMouseListener(mouseHandler)
-        table.addMouseMotionListener(mouseHandler)
+        })
+        table.addMouseMotionListener(object : MouseAdapter() {
+            override fun mouseMoved(e: MouseEvent) = updateCursor(e)
+        })
 
+        table.componentPopupMenu = buildContextMenu()
+
+        // Status label: update when selection changes
+        table.selectionModel.addListSelectionListener { updateStatusLabel() }
+        table.columnModel.selectionModel.addListSelectionListener { updateStatusLabel() }
+
+        // Layout
+        add(buildToolbar(), BorderLayout.NORTH)
         add(JBScrollPane(table), BorderLayout.CENTER)
+        add(statusLabel, BorderLayout.SOUTH)
     }
 
     // ─── Public API ───────────────────────────────────────────────────────────
 
     fun setData(json: String) {
+        lastRawJson = json
         tableModel.rowCount = 0
         tableModel.columnCount = 0
-        if (json.isBlank()) return
+        if (json.isBlank()) { updateStatusLabel(); return }
 
         try {
             val root = mapper.readTree(json)
@@ -92,18 +167,15 @@ class ResultTablePanel(private val project: Project) : JPanel(BorderLayout()) {
             }
             if (items.isEmpty()) return
 
-            // Build ordered column list: meta fields first, then others alphabetically
+            // Ordered columns: meta keys first (_class always first), then others α-sorted
             val allKeys = linkedSetOf<String>()
-            items.forEach { item ->
-                if (item.isObject) item.fieldNames().forEach { allKeys.add(it) }
-            }
+            items.forEach { item -> if (item.isObject) item.fieldNames().forEach { allKeys.add(it) } }
             val columns = (META_KEYS.filter { it in allKeys } +
                            allKeys.filterNot { it in META_KEYS }.sorted())
                 .toTypedArray<Any>()
 
             tableModel.setColumnIdentifiers(columns)
 
-            // Fill rows
             items.forEach { item ->
                 val row: Array<Any?> = columns.map { col ->
                     if (!item.isObject) return@map item.toString()
@@ -117,27 +189,153 @@ class ResultTablePanel(private val project: Project) : JPanel(BorderLayout()) {
                 tableModel.addRow(row)
             }
 
-            // Auto-size columns (sample up to 30 rows for content width)
+            // Auto-size columns by content (sample up to 30 rows)
             val headerFm = table.tableHeader.getFontMetrics(table.tableHeader.font)
             val cellFm   = table.getFontMetrics(table.font)
             for (i in columns.indices) {
-                val col = table.columnModel.getColumn(i)
-                val headerW = headerFm.stringWidth(columns[i].toString()) + JBUI.scale(24)
+                val col     = table.columnModel.getColumn(i)
+                val colName = columns[i].toString()
+                // For _class: measure short name (that's what we display)
+                val displayName = if (colName == "_class") colName else colName
+                val headerW = headerFm.stringWidth(displayName) + JBUI.scale(24)
                 val contentW = (0 until minOf(tableModel.rowCount, 30))
                     .mapNotNull { r -> tableModel.getValueAt(r, i) as? String }
-                    .maxOfOrNull { s -> cellFm.stringWidth(s) + JBUI.scale(16) }
-                    ?: JBUI.scale(60)
-                col.preferredWidth = maxOf(headerW, contentW).coerceAtMost(JBUI.scale(320))
+                    .maxOfOrNull { s ->
+                        val display = if (colName == "_class") s.substringAfterLast('.') else s
+                        cellFm.stringWidth(display) + JBUI.scale(20)
+                    } ?: JBUI.scale(60)
+                col.minWidth       = JBUI.scale(40)
+                col.preferredWidth = maxOf(headerW, contentW).coerceAtMost(JBUI.scale(280))
             }
         } catch (_: Exception) { /* malformed JSON — leave table empty */ }
     }
 
     fun clear() {
+        lastRawJson = ""
         tableModel.rowCount = 0
         tableModel.columnCount = 0
+        statusLabel.text = " "
     }
 
-    // ─── Helpers ──────────────────────────────────────────────────────────────
+    // ─── Toolbar ──────────────────────────────────────────────────────────────
+
+    private fun buildToolbar(): JPanel = JPanel(FlowLayout(FlowLayout.LEFT, 4, 2)).apply {
+        border = JBUI.Borders.customLine(JBColor.border(), 0, 0, 1, 0)
+        add(JButton("Copy Row", AllIcons.Actions.Copy).apply {
+            toolTipText = "Copy selected row as a JSON object"
+            addActionListener { copySelectedRow() }
+        })
+        add(JButton("Copy JSON", AllIcons.FileTypes.Json).apply {
+            toolTipText = "Copy all results as JSON"
+            addActionListener { copyAllAsJson() }
+        })
+        add(JButton("Copy as String", AllIcons.FileTypes.Text).apply {
+            toolTipText = "Copy all results as an escaped JSON string"
+            addActionListener { copyAllAsString() }
+        })
+    }
+
+    // ─── Context menu ─────────────────────────────────────────────────────────
+
+    private fun buildContextMenu(): JPopupMenu = JPopupMenu().apply {
+        add(JMenuItem("Copy Cell Value", AllIcons.Actions.Copy).apply {
+            addActionListener { copySelectedCell() }
+        })
+        add(JMenuItem("Copy Row as JSON").apply {
+            addActionListener { copySelectedRow() }
+        })
+        add(JSeparator())
+        add(JMenuItem("Copy All as JSON", AllIcons.FileTypes.Json).apply {
+            addActionListener { copyAllAsJson() }
+        })
+        add(JMenuItem("Copy All as String", AllIcons.FileTypes.Text).apply {
+            addActionListener { copyAllAsString() }
+        })
+        add(JSeparator())
+        add(JMenuItem("Navigate to Class", AllIcons.Actions.Find).apply {
+            addActionListener {
+                val row = table.selectedRow; val col = table.selectedColumn
+                if (row < 0 || col < 0) return@addActionListener
+                val colName = table.columnModel.getColumn(col).headerValue as? String
+                if (colName != "_class") return@addActionListener
+                val modelRow = table.convertRowIndexToModel(row)
+                (tableModel.getValueAt(modelRow, col) as? String)?.let { navigateToClass(it) }
+            }
+        })
+    }
+
+    // ─── Mouse / selection handlers ───────────────────────────────────────────
+
+    private fun preselectCell(e: MouseEvent) {
+        val row = table.rowAtPoint(e.point)
+        val col = table.columnAtPoint(e.point)
+        if (row >= 0) table.setRowSelectionInterval(row, row)
+        if (col >= 0) table.setColumnSelectionInterval(col, col)
+    }
+
+    private fun onDoubleClick(e: MouseEvent) {
+        val row = table.rowAtPoint(e.point)
+        val col = table.columnAtPoint(e.point)
+        if (row < 0 || col < 0) return
+        val colName = table.columnModel.getColumn(col).headerValue as? String ?: return
+        if (colName != "_class") return
+        val modelRow = table.convertRowIndexToModel(row)
+        (tableModel.getValueAt(modelRow, col) as? String)?.let { navigateToClass(it) }
+    }
+
+    private fun updateCursor(e: MouseEvent) {
+        val col     = table.columnAtPoint(e.point)
+        val colName = if (col >= 0) table.columnModel.getColumn(col).headerValue as? String else null
+        table.cursor = if (colName == "_class") Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+                       else Cursor.getDefaultCursor()
+    }
+
+    private fun updateStatusLabel() {
+        val row = table.selectedRow
+        val col = table.selectedColumn
+        if (row < 0 || col < 0) { statusLabel.text = " "; return }
+        val colName = table.columnModel.getColumn(col).headerValue as? String
+        if (colName == "_class") {
+            val modelRow = table.convertRowIndexToModel(row)
+            val fqn = tableModel.getValueAt(modelRow, col) as? String ?: ""
+            statusLabel.text = if (fqn.isNotBlank()) "  $fqn" else " "
+        } else {
+            statusLabel.text = " "
+        }
+    }
+
+    // ─── Copy actions ─────────────────────────────────────────────────────────
+
+    private fun copySelectedCell() {
+        val row = table.selectedRow
+        val col = table.selectedColumn
+        if (row < 0 || col < 0) return
+        val value = table.getValueAt(row, col)?.toString() ?: ""
+        toClipboard(value)
+    }
+
+    private fun copySelectedRow() {
+        val row = table.selectedRow
+        if (row < 0) return
+        val modelRow = table.convertRowIndexToModel(row)
+        val map = linkedMapOf<String, Any?>()
+        for (c in 0 until tableModel.columnCount) {
+            map[tableModel.getColumnName(c)] = tableModel.getValueAt(modelRow, c)
+        }
+        toClipboard(mapper.writerWithDefaultPrettyPrinter().writeValueAsString(map))
+    }
+
+    private fun copyAllAsJson() = toClipboard(lastRawJson)
+
+    private fun copyAllAsString() {
+        val compact = try {
+            mapper.writeValueAsString(mapper.readTree(lastRawJson))
+        } catch (_: Exception) { lastRawJson }
+        val escaped = compact.replace("\\", "\\\\").replace("\"", "\\\"")
+        toClipboard("\"$escaped\"")
+    }
+
+    // ─── Navigation ───────────────────────────────────────────────────────────
 
     private fun navigateToClass(fqn: String) {
         val shortName = fqn.trim().substringAfterLast('.')
@@ -147,34 +345,32 @@ class ResultTablePanel(private val project: Project) : JPanel(BorderLayout()) {
                 FilenameIndex.getVirtualFilesByName("$shortName.java", scope).firstOrNull()
                     ?: FilenameIndex.getVirtualFilesByName("$shortName.kt", scope).firstOrNull()
             }
-            vf?.let { ApplicationManager.getApplication().invokeLater { OpenFileDescriptor(project, it).navigate(true) } }
+            vf?.let {
+                ApplicationManager.getApplication().invokeLater {
+                    OpenFileDescriptor(project, it).navigate(true)
+                }
+            }
         }
     }
 
-    private fun updateCursor(e: MouseEvent) {
-        val col = table.columnAtPoint(e.point)
-        val colName = if (col >= 0) table.columnModel.getColumn(col).headerValue as? String else null
-        table.cursor = if (colName == "_class") Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
-                       else Cursor.getDefaultCursor()
-    }
+    // ─── Helpers ──────────────────────────────────────────────────────────────
+
+    private fun toClipboard(text: String) =
+        Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null)
 
     // ─── Cell renderer ────────────────────────────────────────────────────────
 
     private inner class ClassAwareCellRenderer : DefaultTableCellRenderer() {
 
-        init {
-            horizontalAlignment = SwingConstants.LEFT
-        }
+        init { horizontalAlignment = SwingConstants.LEFT }
 
         override fun getTableCellRendererComponent(
             table: JTable, value: Any?, isSelected: Boolean,
             hasFocus: Boolean, row: Int, column: Int
         ): Component {
-            // Let super set background, selection colors, etc.
             super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column)
-
             val colName = table.columnModel.getColumn(column).headerValue as? String
-
+            font = font.deriveFont(Font.PLAIN)
             when {
                 value == null -> {
                     text = "null"
@@ -182,15 +378,12 @@ class ResultTablePanel(private val project: Project) : JPanel(BorderLayout()) {
                     if (!isSelected) foreground = JBColor.GRAY
                 }
                 colName == "_class" && value is String && value.isNotBlank() -> {
-                    font = font.deriveFont(Font.PLAIN)
                     if (!isSelected) foreground = JBColor(Color(0x0066CC), Color(0x4A9EFF))
-                    text = "<html><u>${esc(value)}</u></html>"
+                    // Show only the simple class name; full FQN via tooltip + status label
+                    val shortName = value.substringAfterLast('.')
+                    text = "<html><u>${esc(shortName)}</u></html>"
                 }
-                else -> {
-                    font = font.deriveFont(Font.PLAIN)
-                    // foreground already set by super
-                    text = value.toString()
-                }
+                else -> text = value.toString()
             }
             return this
         }
