@@ -42,6 +42,12 @@ class AqlConsoleStateService : PersistentStateComponent<AqlConsoleStateService.S
          * stripped so the saved state survives schema changes.
          */
         var treeExpandedPaths: MutableList<String> = mutableListOf()
+        /**
+         * True while the AQL Console tab is open.
+         * Persisted so [ArangoProjectActivity] can reopen the tab on the next IDE startup.
+         * Defaults to false — the console is not opened automatically on first install.
+         */
+        var wasConsoleOpen: Boolean = false
     }
 
     private var myState = State()
