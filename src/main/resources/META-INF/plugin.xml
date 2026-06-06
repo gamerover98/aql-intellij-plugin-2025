@@ -69,6 +69,8 @@
       <lang.findUsagesProvider language="AQL" implementationClass="com.arangodb.intellij.aql.lang.AqlFindUsagesProvider"/>
       <platform.backend.documentation.psiTargetProvider implementationClass="com.arangodb.intellij.aql.lang.AqlDocumentationTargetProvider"/>
       <gotoDeclarationHandler implementation="com.arangodb.intellij.aql.lang.AqlCollectionGotoDeclarationHandler"/>
+      <!-- Ctrl+Click on AQL field references inside @Query → navigate to Java entity field -->
+      <gotoDeclarationHandler implementation="com.arangodb.intellij.aql.spring.SpringDataFieldGotoDeclarationHandler"/>
 
         <!-- Syntax Highlighter:
              https://plugins.jetbrains.com/docs/intellij/syntax-highlighter-and-color-settings-page.html#register-the-syntax-highlighter-factory -->
