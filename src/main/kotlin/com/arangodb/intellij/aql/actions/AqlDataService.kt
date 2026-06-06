@@ -2,11 +2,13 @@ package com.arangodb.intellij.aql.actions
 
 import com.arangodb.ArangoDBException
 import com.arangodb.entity.CollectionType
+import com.arangodb.entity.IndexEntity
 import com.arangodb.intellij.aql.db.AqlDatabaseService
 import com.arangodb.intellij.aql.exc.AqlDataSourceException
 import com.arangodb.intellij.aql.model.AqlQuery
 import com.arangodb.intellij.aql.model.ArangoDbDatabase
 import com.arangodb.intellij.aql.model.ArangoDbServer
+import com.arangodb.intellij.aql.services.ServerListState
 import com.arangodb.intellij.aql.ui.DataWindowState
 import com.arangodb.intellij.aql.ui.dialogs.AqlServerDialog
 import com.arangodb.intellij.aql.ui.renderers.AqlNodeModel
@@ -184,7 +186,13 @@ class AqlDataService private constructor(private val project: Project) {
             log.error(response.message)
             return
         }
-        stateComponent.loadState(dialog.getData())
+        val newServer = dialog.getData()
+        stateComponent.loadState(newServer)
+        // C2: keep ServerListState in sync
+        val serverList = ServerListState.getInstance(project)
+        val existingIdx = serverList.findIndex(state.host, state.port)
+        if (existingIdx >= 0) serverList.replaceServer(existingIdx, newServer)
+        else serverList.addServer(newServer)
         refreshSchema()
     }
 
@@ -213,13 +221,67 @@ class AqlDataService private constructor(private val project: Project) {
     }
 
     /**
-     * Clears all persisted server settings and fires a schema-refresh event
-     * so the tool window reverts to its empty state.
+     * Clears the active server settings, removes it from [ServerListState], and fires
+     * a schema-refresh event so the tool window reverts to its empty/multi-server state.
      */
     fun removeServer(): AqlDataService {
+        val current = stateComponent.state
+        ServerListState.getInstance(project).removeByHostPort(current.host, current.port)
         stateComponent.loadState(ArangoDbServer())
         sendEmptyMessage(ActionBusEvent.AQL_SYSTEM_REFRESH_SCHEME)
         return this
+    }
+
+    /**
+     * C1: Silent auto-refresh variant — fetches fresh schema and fires the refresh
+     * event without showing any error popup on failure.
+     * Intended to be called from the background auto-refresh scheduler.
+     */
+    fun refreshSchemaSilent(): AqlDataService {
+        if (!hasValidSettings()) return this
+        try {
+            val server = service.getServer(project)
+            service.refresh(server, project)
+            sendEmptyMessage(ActionBusEvent.AQL_SYSTEM_REFRESH_SCHEME)
+        } catch (_: AqlDataSourceException) {
+            // silent — don't interrupt the user on a background tick
+        }
+        return this
+    }
+
+    /**
+     * C3: Returns the list of indexes for [collectionName] in the active database.
+     * Returns an empty list on any error (no connection, unknown collection, etc.).
+     */
+    fun getCollectionIndexes(collectionName: String): List<IndexEntity> =
+        try { service.getCollectionIndexes(collectionName, project) } catch (_: Exception) { emptyList() }
+
+    /**
+     * C2: Builds a tree with multiple SERVER roots under a single invisible root.
+     *
+     * [allServers] is the full list from [ServerListState].
+     * [activeServer] is the currently connected server with its databases populated —
+     *   matched to entries in [allServers] by host+port.
+     *   Non-matching entries are shown as empty SERVER nodes (not yet activated).
+     *
+     * Set [Tree.isRootVisible] = false when using this model.
+     */
+    fun populateTreeMulti(
+        allServers: List<ArangoDbServer>,
+        activeServer: ArangoDbServer?,
+        includeSystem: Boolean = true
+    ): DefaultTreeModel {
+        val invisibleRoot = CheckedTreeNode()   // no userObject → invisible root
+        for (serverDef in allServers) {
+            val isActive = activeServer != null &&
+                serverDef.host == activeServer.host && serverDef.port == activeServer.port
+            val serverData = if (isActive) activeServer!! else serverDef
+            // Re-use the single-server builder and harvest its root node
+            val singleModel = populateTree(serverData, includeSystem)
+            val serverRoot  = singleModel.root as? CheckedTreeNode ?: continue
+            invisibleRoot.add(serverRoot)
+        }
+        return DefaultTreeModel(invisibleRoot)
     }
 
     /**
@@ -234,7 +296,9 @@ class AqlDataService private constructor(private val project: Project) {
      */
     fun populateTree(server: ArangoDbServer, includeSystem: Boolean = true): DefaultTreeModel {
         // A6: SERVER tooltip — host:port, user, SSL, database count
+        // C2: tag stores "host:port" for server identification in the context menu
         val serverObject = AqlNodeModel(server.name, server.host, AqlNodeModel.Type.SERVER).also {
+            it.tag = "${server.host}:${server.port}"
             it.tooltipLines = buildList {
                 add("<b>${server.host}:${server.port}</b>")
                 val user = server.user

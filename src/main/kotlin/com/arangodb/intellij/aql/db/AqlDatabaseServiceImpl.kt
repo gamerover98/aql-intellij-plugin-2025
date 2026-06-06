@@ -5,6 +5,7 @@ import com.arangodb.ArangoDBException
 import com.arangodb.ArangoDatabase
 import com.arangodb.Protocol
 import com.arangodb.entity.CollectionType
+import com.arangodb.entity.IndexEntity
 import com.arangodb.intellij.aql.actions.AqlDataService
 import com.arangodb.intellij.aql.editor.AqlKeywordElement
 import com.arangodb.intellij.aql.exc.AqlDataSourceException
@@ -96,6 +97,16 @@ class AqlDatabaseServiceImpl : AqlDatabaseService {
         } catch (e: AqlDataSourceException) {
             // checkEmpty() throws with message — show fix-link notification once
             AqlUtils.popupDataSourceFix(e.message ?: "Invalid ArangoDB data source", project)
+        }
+    }
+
+    override fun getCollectionIndexes(collectionName: String, project: Project): List<IndexEntity> {
+        return try {
+            val state = project.getService(com.arangodb.intellij.aql.ui.DataWindowState::class.java).state
+                ?: return emptyList()
+            getActiveDatabase(state, project).collection(collectionName).indexes.toList()
+        } catch (_: Exception) {
+            emptyList()
         }
     }
 

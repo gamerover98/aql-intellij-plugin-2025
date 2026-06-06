@@ -5,6 +5,8 @@ import com.arangodb.intellij.aql.actions.ActionBusEvent
 import com.arangodb.intellij.aql.actions.AqlDataService
 import com.arangodb.intellij.aql.services.AqlConsoleStateService
 import com.arangodb.intellij.aql.services.ArangoProjectService
+import com.arangodb.intellij.aql.model.ArangoDbServer
+import com.arangodb.intellij.aql.services.ServerListState
 import com.arangodb.intellij.aql.ui.DataWindowState
 import com.arangodb.intellij.aql.ui.actions.*
 import com.arangodb.intellij.aql.ui.renderers.AqlNodeModel
@@ -42,17 +44,23 @@ import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.TimeUnit
 import javax.swing.BorderFactory
 import javax.swing.JLabel
 import javax.swing.JMenuItem
 import javax.swing.JPanel
 import javax.swing.JPopupMenu
+import javax.swing.JSplitPane
 import javax.swing.SwingConstants
 import javax.swing.SwingUtilities
 import javax.swing.event.DocumentEvent
 import javax.swing.event.DocumentListener
 import javax.swing.event.TreeExpansionEvent
 import javax.swing.event.TreeExpansionListener
+import javax.swing.event.TreeSelectionEvent
+import javax.swing.event.TreeSelectionListener
 import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.DefaultTreeModel
 
@@ -78,6 +86,11 @@ import javax.swing.tree.DefaultTreeModel
  *  - A8: "Last refreshed HH:mm:ss" appended to the connected status bar
  *  - B5: Tree expansion state persisted across IDE restarts via AqlConsoleStateService
  *  - B7: "Open in Console" on DATABASE sets that DB as active before switching tabs
+ *
+ * Sprint 4 features:
+ *  - C1: Auto-refresh — configurable scheduler (5/15/30 min) started on successful connection
+ *  - C2: Multi-server — ServerListState registry, invisible root, "Set Active" on SERVER nodes
+ *  - C3: Collection detail panel — index table shown below the tree on single click
  */
 class ServerToolWindow(private val project: Project) : Disposable {
 
@@ -106,6 +119,14 @@ class ServerToolWindow(private val project: Project) : Disposable {
     // ─── A8: Last successful refresh timestamp ────────────────────────────────
 
     private var lastRefreshTime: LocalTime? = null
+
+    // ─── C1: Auto-refresh scheduler ───────────────────────────────────────────
+
+    private var autoRefreshScheduler: ScheduledExecutorService? = null
+
+    // ─── C3: Collection detail panel ──────────────────────────────────────────
+
+    private val collectionDetailPanel = CollectionDetailPanel()
 
     // ─── A1: Status bar ───────────────────────────────────────────────────────
 
@@ -160,13 +181,20 @@ class ServerToolWindow(private val project: Project) : Disposable {
         // B3: search field above the decorator (below the tree's own toolbar)
         val searchPanel = buildSearchPanel()
 
-        val innerPanel = JPanel(BorderLayout()).apply {
+        val treePanel = JPanel(BorderLayout()).apply {
             add(searchPanel,    BorderLayout.NORTH)
             add(decoratorPanel, BorderLayout.CENTER)
         }
 
-        schemePanel.add(innerPanel,   BorderLayout.CENTER)
-        schemePanel.add(statusLabel,  BorderLayout.SOUTH)
+        // C3: vertical split — tree on top, collection detail panel below
+        val splitPane = JSplitPane(JSplitPane.VERTICAL_SPLIT, treePanel, collectionDetailPanel).apply {
+            resizeWeight = 0.75
+            dividerSize  = 4
+            isContinuousLayout = true
+        }
+
+        schemePanel.add(splitPane,   BorderLayout.CENTER)
+        schemePanel.add(statusLabel, BorderLayout.SOUTH)
 
         val service = project.service<ArangoProjectService>()
 
@@ -220,6 +248,26 @@ class ServerToolWindow(private val project: Project) : Disposable {
             }
             override fun mousePressed(e: MouseEvent) {
                 if (SwingUtilities.isRightMouseButton(e)) onRightClick(e)
+            }
+        })
+
+        // C3: single-click on COLLECTION/EDGE → load and show collection details
+        schemaTree.addTreeSelectionListener(object : TreeSelectionListener {
+            override fun valueChanged(e: TreeSelectionEvent) {
+                val path  = e.newLeadSelectionPath
+                val node  = path?.lastPathComponent as? DefaultMutableTreeNode
+                val model = node?.userObject as? AqlNodeModel
+                if (model == null ||
+                    (model.type != AqlNodeModel.Type.COLLECTION && model.type != AqlNodeModel.Type.EDGE)) {
+                    collectionDetailPanel.showEmpty()
+                    return
+                }
+                val colName = model.displayName ?: return
+                collectionDetailPanel.showLoading(colName)
+                ApplicationManager.getApplication().executeOnPooledThread {
+                    val indexes = AqlDataService.with(project).getCollectionIndexes(colName)
+                    SwingUtilities.invokeLater { collectionDetailPanel.showDetails(model, indexes) }
+                }
             }
         })
 
@@ -299,11 +347,12 @@ class ServerToolWindow(private val project: Project) : Disposable {
      */
     private fun filterNode(source: DefaultMutableTreeNode, filter: String): DefaultMutableTreeNode? {
         val model       = source.userObject as? AqlNodeModel
-        val isContainer = model?.type?.let {
+        // C2: nodes without a model (invisible multi-server root) are treated as containers
+        val isContainer = model == null || model.type.let {
             it == AqlNodeModel.Type.SERVER ||
             it == AqlNodeModel.Type.DATABASE ||
             it == AqlNodeModel.Type.CATEGORY
-        } ?: false
+        }
 
         val matchingChildren = (0 until source.childCount).mapNotNull { i ->
             filterNode(source.getChildAt(i) as? DefaultMutableTreeNode ?: return@mapNotNull null, filter)
@@ -329,30 +378,51 @@ class ServerToolWindow(private val project: Project) : Disposable {
     // ─── Tree population ──────────────────────────────────────────────────────
 
     private fun fillTree() {
-        val service = AqlDataService.with(project)
+        val service    = AqlDataService.with(project)
+        val serverList = ServerListState.getInstance(project)
 
-        if (!service.hasValidSettings()) {
+        // C2: one-time migration — keep legacy single-server users' config
+        serverList.migrateIfEmpty(project.getService(DataWindowState::class.java).state)
+
+        val servers = serverList.getServers()
+
+        if (servers.isEmpty()) {
             schemaTree.isRootVisible = false
             schemaTree.model = DefaultTreeModel(DefaultMutableTreeNode())
             fullTreeModel = null
             setStatus(ConnectionState.NO_CONFIG)
+            stopAutoRefresh()
             return
         }
 
-        val server    = service.server()
-        val treeModel = service.populateTree(server, showSystemCollections)
+        // Fetch active server with populated databases (null on connection failure)
+        val activeServerData: ArangoDbServer? = if (service.hasValidSettings()) {
+            try { service.server() } catch (_: Exception) { null }
+        } else null
+
+        // C2: single-server → visible root; multi-server → invisible root
+        val isSingle  = servers.size == 1
+        val treeModel: DefaultTreeModel
+        if (isSingle) {
+            schemaTree.isRootVisible = true
+            treeModel = service.populateTree(activeServerData ?: servers[0], showSystemCollections)
+        } else {
+            schemaTree.isRootVisible = false
+            treeModel = service.populateTreeMulti(servers, activeServerData, showSystemCollections)
+        }
 
         fullTreeModel = treeModel
-        schemaTree.isRootVisible = true
-        applyFilter()   // respect any active search text
+        applyFilter()   // respects active search text + restores expansion
 
-        if (server.databases.isNotEmpty()) {
+        if (activeServerData?.databases?.isNotEmpty() == true) {
             lastRefreshTime = LocalTime.now()   // A8
             val state = project.getService(DataWindowState::class.java).state
             setStatus(ConnectionState.CONNECTED, "${state.host}:${state.port}")
             loadCountsAsync(treeModel)
+            startAutoRefresh(state.autoRefreshMinutes)   // C1
         } else {
-            setStatus(ConnectionState.ERROR)
+            stopAutoRefresh()
+            setStatus(if (service.hasValidSettings()) ConnectionState.ERROR else ConnectionState.NO_CONFIG)
         }
     }
 
@@ -370,6 +440,10 @@ class ServerToolWindow(private val project: Project) : Disposable {
         val menu = JPopupMenu()
         when (model.type) {
             AqlNodeModel.Type.SERVER -> {
+                // C2: "Set Active" switches the active server in multi-server mode
+                menu.add(JMenuItem("Set Active", Icons.ICON_SELECTED).apply {
+                    addActionListener { activateServer(model.tag) }
+                })
                 menu.add(JMenuItem("Edit Server", Icons.ICON_EDIT).apply {
                     addActionListener { AqlDataService.with(project).showServerDialog() }
                 })
@@ -382,8 +456,7 @@ class ServerToolWindow(private val project: Project) : Disposable {
                 })
                 menu.addSeparator()
                 menu.add(JMenuItem("Copy Address", AllIcons.Actions.Copy).apply {
-                    val state = project.getService(DataWindowState::class.java).state
-                    addActionListener { toClipboard("${state.host}:${state.port}") }
+                    addActionListener { toClipboard(model.tag ?: (model.displayName ?: "")) }
                 })
             }
             AqlNodeModel.Type.DATABASE -> {
@@ -495,19 +568,31 @@ class ServerToolWindow(private val project: Project) : Disposable {
      * active database (recursing into CATEGORY sub-folders added by A3) and calls
      * [DefaultTreeModel.nodeChanged] on the EDT so the renderer repaints individual
      * rows without a full tree rebuild.
+     *
+     * C2: uses [findActiveDbNode] to locate the selected DATABASE in any tree shape
+     * (single-server visible root *or* multi-server invisible root).
      */
     private fun loadCountsAsync(treeModel: DefaultTreeModel) {
         val service = AqlDataService.with(project)
         ApplicationManager.getApplication().executeOnPooledThread {
-            val root = treeModel.root as? DefaultMutableTreeNode ?: return@executeOnPooledThread
-            for (i in 0 until root.childCount) {
-                val dbNode  = root.getChildAt(i) as? DefaultMutableTreeNode ?: continue
-                val dbModel = dbNode.userObject as? AqlNodeModel ?: continue
-                if (!dbModel.isSelected) continue
-                loadCountsForNode(dbNode, service, treeModel)
-                break
-            }
+            val root     = treeModel.root as? DefaultMutableTreeNode ?: return@executeOnPooledThread
+            val activeDb = findActiveDbNode(root)          ?: return@executeOnPooledThread
+            loadCountsForNode(activeDb, service, treeModel)
         }
+    }
+
+    /**
+     * Recursively locates the first DATABASE node with [AqlNodeModel.isSelected] = true.
+     * Works for both single-server (SERVER as root) and multi-server (invisible root).
+     */
+    private fun findActiveDbNode(node: DefaultMutableTreeNode): DefaultMutableTreeNode? {
+        val model = node.userObject as? AqlNodeModel
+        if (model?.type == AqlNodeModel.Type.DATABASE && model.isSelected) return node
+        for (i in 0 until node.childCount) {
+            val child = node.getChildAt(i) as? DefaultMutableTreeNode ?: continue
+            findActiveDbNode(child)?.let { return it }
+        }
+        return null
     }
 
     /**
@@ -535,6 +620,54 @@ class ServerToolWindow(private val project: Project) : Disposable {
                 else -> { /* SERVER/DATABASE/GRAPH/VIEW — no count to load */ }
             }
         }
+    }
+
+    // ─── C1: Auto-refresh scheduler ───────────────────────────────────────────
+
+    /**
+     * Starts (or restarts) a daemon background scheduler that calls
+     * [AqlDataService.refreshSchemaSilent] every [intervalMinutes] minutes.
+     * No-op when [intervalMinutes] ≤ 0.
+     */
+    private fun startAutoRefresh(intervalMinutes: Int) {
+        stopAutoRefresh()
+        if (intervalMinutes <= 0) return
+        autoRefreshScheduler = Executors.newSingleThreadScheduledExecutor { r ->
+            Thread(r, "aql-auto-refresh").also { it.isDaemon = true }
+        }
+        autoRefreshScheduler?.scheduleWithFixedDelay(
+            {
+                if (!project.isDisposed) {
+                    ApplicationManager.getApplication().executeOnPooledThread {
+                        if (!project.isDisposed) AqlDataService.with(project).refreshSchemaSilent()
+                    }
+                }
+            },
+            intervalMinutes.toLong(), intervalMinutes.toLong(), TimeUnit.MINUTES
+        )
+    }
+
+    private fun stopAutoRefresh() {
+        autoRefreshScheduler?.shutdownNow()
+        autoRefreshScheduler = null
+    }
+
+    // ─── C2: Multi-server activation ──────────────────────────────────────────
+
+    /**
+     * Identifies the server from [tag] ("host:port"), updates [DataWindowState]
+     * so it becomes the active server, and triggers a schema refresh.
+     */
+    private fun activateServer(tag: String?) {
+        if (tag == null) return
+        val colonIdx = tag.lastIndexOf(':')
+        if (colonIdx < 1) return
+        val host = tag.substring(0, colonIdx)
+        val port = tag.substring(colonIdx + 1).toIntOrNull() ?: return
+        val server = ServerListState.getInstance(project)
+            .getServers().firstOrNull { it.host == host && it.port == port } ?: return
+        project.getService(DataWindowState::class.java).loadState(server)
+        AqlDataService.with(project).refreshSchema()
     }
 
     // ─── B5: Expansion-state persistence ─────────────────────────────────────
@@ -588,5 +721,7 @@ class ServerToolWindow(private val project: Project) : Disposable {
     fun getContent(): JPanel = panel
     fun getProject(): Project = project
 
-    override fun dispose() { /* nothing */ }
+    override fun dispose() {
+        stopAutoRefresh()   // C1: ensure the background thread is cleaned up
+    }
 }

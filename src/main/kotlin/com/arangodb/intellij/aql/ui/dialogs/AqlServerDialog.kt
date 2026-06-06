@@ -22,6 +22,7 @@ import com.intellij.ui.components.JBTextField
 import java.awt.Dimension
 import java.awt.Point
 import javax.swing.JButton
+import javax.swing.JComboBox
 import javax.swing.JComponent
 import javax.swing.JPanel
 
@@ -37,6 +38,8 @@ class AqlServerDialog(private val project: Project) : DialogWrapper(project) {
     @JvmField var tabbedPane: JBTabbedPane? = null
     @JvmField var excludeSystemCheckbox: JBCheckBox? = null
     @JvmField var useSslCheckbox: JBCheckBox? = null
+    /** C1: Auto-refresh interval selector. Items map to [REFRESH_INTERVALS] by index. */
+    @JvmField var autoRefreshCombo: JComboBox<String>? = null
 
     init {
         Disposer.register(project, myDisposable)
@@ -51,6 +54,14 @@ class AqlServerDialog(private val project: Project) : DialogWrapper(project) {
 
     private fun createUIComponents() {
         portSpinner = JBIntSpinner(UINumericRange(8529, 0, 65535))
+        @Suppress("UNCHECKED_CAST")
+        autoRefreshCombo = JComboBox(REFRESH_LABELS.toTypedArray()) as JComboBox<String>
+    }
+
+    companion object {
+        /** C1: Parallel arrays — display labels and corresponding minute values. */
+        val REFRESH_LABELS  = listOf("Disabled", "Every 5 minutes", "Every 15 minutes", "Every 30 minutes")
+        val REFRESH_MINUTES = listOf(0, 5, 15, 30)
     }
 
     fun showTooltip(response: ActionResponse) {
@@ -95,6 +106,7 @@ class AqlServerDialog(private val project: Project) : DialogWrapper(project) {
         state.port = portSpinner?.number ?: ArangoDbServer.DEFAULT_PORT
         state.isExcludeSystemCollections = excludeSystemCheckbox?.isSelected ?: true
         state.isUseSsl = useSslCheckbox?.isSelected ?: false
+        state.autoRefreshMinutes = REFRESH_MINUTES.getOrElse(autoRefreshCombo?.selectedIndex ?: 0) { 0 }
     }
 
     fun getData(): ArangoDbServer = buildState()
@@ -107,5 +119,7 @@ class AqlServerDialog(private val project: Project) : DialogWrapper(project) {
         portSpinner?.number = server.port
         excludeSystemCheckbox?.isSelected = server.isExcludeSystemCollections
         useSslCheckbox?.isSelected = server.isUseSsl
+        autoRefreshCombo?.selectedIndex =
+            REFRESH_MINUTES.indexOfFirst { it == server.autoRefreshMinutes }.coerceAtLeast(0)
     }
 }

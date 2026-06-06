@@ -11,6 +11,8 @@ class ArangoDbServer {
     var port: Int = DEFAULT_PORT
     var isExcludeSystemCollections: Boolean = true
     var isUseSsl: Boolean = false
+    /** C1: Auto-refresh interval in minutes. 0 = disabled; valid values: 0, 5, 15, 30. */
+    var autoRefreshMinutes: Int = 0
     var host: String = "127.0.0.1"
     var user: String? = null
     var name: String? = null

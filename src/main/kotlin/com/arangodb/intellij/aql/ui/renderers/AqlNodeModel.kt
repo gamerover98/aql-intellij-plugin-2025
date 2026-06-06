@@ -21,6 +21,12 @@ class AqlNodeModel @JvmOverloads constructor(
     var count: Long? = null
 
     /**
+     * C2: Auxiliary tag for SERVER nodes storing "host:port".
+     * Not rendered; used to identify a server when the user acts on its context menu.
+     */
+    var tag: String? = null
+
+    /**
      * A6: Optional rich tooltip lines rendered as HTML on hover.
      * When non-empty the renderer shows `<html>line1<br>line2…</html>`.
      * Populated by [com.arangodb.intellij.aql.actions.AqlDataService.populateTree]

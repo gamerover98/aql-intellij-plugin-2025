@@ -1,6 +1,7 @@
 package com.arangodb.intellij.aql.db
 
 import com.arangodb.ArangoDatabase
+import com.arangodb.entity.IndexEntity
 import com.arangodb.intellij.aql.exc.AqlDataSourceException
 import com.arangodb.intellij.aql.model.ArangoDbServer
 import com.intellij.codeInsight.lookup.LookupElement
@@ -32,4 +33,7 @@ interface AqlDatabaseService {
 
     /** Returns the document count for a collection, or -1 if unavailable. */
     fun getCollectionCount(collectionName: String, project: Project): Long
+
+    /** C3: Returns the list of indexes for a collection. Empty list on any error. */
+    fun getCollectionIndexes(collectionName: String, project: Project): List<IndexEntity>
 }
