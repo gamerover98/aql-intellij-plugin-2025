@@ -4,33 +4,31 @@ import com.arangodb.intellij.aql.actions.ActionBusEvent
 import com.arangodb.intellij.aql.actions.ActionEventData
 import com.arangodb.intellij.aql.actions.AqlDataService
 import com.arangodb.intellij.aql.lang.AqlLanguage
-import com.arangodb.intellij.aql.model.AqlQuery
-import com.arangodb.intellij.aql.model.ArangoDbDatabase
 import com.arangodb.intellij.aql.services.AqlConsoleStateService
+import com.arangodb.intellij.aql.services.AqlResultService
 import com.arangodb.intellij.aql.ui.DataWindowState
 import com.arangodb.intellij.aql.ui.panels.AqlGraphPanel
-import com.arangodb.intellij.aql.ui.panels.JsonPanel
+import com.arangodb.intellij.aql.ui.panels.ResultsPanel
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.editor.event.DocumentEvent
+import com.intellij.openapi.editor.event.DocumentListener
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.ToolWindow
-import com.intellij.ui.LanguageTextField
 import com.intellij.ui.JBSplitter
+import com.intellij.ui.LanguageTextField
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBList
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTabbedPane
 import com.intellij.util.ui.JBUI
-import com.intellij.openapi.editor.event.DocumentEvent
-import com.intellij.openapi.editor.event.DocumentListener
 import java.awt.BorderLayout
 import java.awt.FlowLayout
 import java.awt.event.KeyEvent
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import javax.swing.*
-import javax.swing.DefaultListModel
 
 class AqlConsoleWindow(private val project: Project, @Suppress("UNUSED_PARAMETER") toolWindow: ToolWindow) : Disposable {
 
@@ -54,12 +52,13 @@ class AqlConsoleWindow(private val project: Project, @Suppress("UNUSED_PARAMETER
     private var isUpdatingDbSelector = false
 
     // ─── Result panels ──────────────────────────────────────────────────────
-    private val jsonPanel = JsonPanel(project)
-    private val graphPanel = AqlGraphPanel()
+    /** Table + JSON tree sub-tabs for query results. */
+    private val resultsPanel = ResultsPanel(project)
+    private val graphPanel   = AqlGraphPanel()
 
     // ─── History ────────────────────────────────────────────────────────────
     private val historyModel = DefaultListModel<HistoryEntry>()
-    private val historyList = JBList(historyModel)
+    private val historyList  = JBList(historyModel)
 
     // ─── Root component ─────────────────────────────────────────────────────
     private val tabs = JBTabbedPane()
@@ -80,36 +79,33 @@ class AqlConsoleWindow(private val project: Project, @Suppress("UNUSED_PARAMETER
     // ─── UI construction ────────────────────────────────────────────────────
 
     private fun buildUI(): JComponent {
-        // Toolbar
         val toolbar = buildToolbar()
 
-        // Editor wrapper
-        val editorWrapper = JPanel(BorderLayout())
-        editorWrapper.add(toolbar, BorderLayout.NORTH)
-        editorWrapper.add(editorField, BorderLayout.CENTER)
-        editorWrapper.border = JBUI.Borders.empty()
+        val editorWrapper = JPanel(BorderLayout()).apply {
+            add(toolbar, BorderLayout.NORTH)
+            add(editorField, BorderLayout.CENTER)
+            border = JBUI.Borders.empty()
+        }
 
-        // Result tabs
-        tabs.addTab("JSON Results", AllIcons.FileTypes.Json, JBScrollPane(jsonPanel.consoleComponent))
-        tabs.addTab("Graph View", AllIcons.Nodes.Related, graphPanel)
-        tabs.addTab("Query History", AllIcons.Vcs.History, buildHistoryPanel())
+        // Outer result tabs: [0] JSON Results, [1] Graph View, [2] Query History
+        tabs.addTab("JSON Results", AllIcons.FileTypes.Json,   resultsPanel.component)
+        tabs.addTab("Graph View",   AllIcons.Nodes.Related,    graphPanel)
+        tabs.addTab("Query History",AllIcons.Vcs.History,      buildHistoryPanel())
 
-        // Splitter: editor top (35%), results bottom (65%)
-        val splitter = JBSplitter(true, 0.35f)
-        splitter.firstComponent = editorWrapper
-        splitter.secondComponent = tabs
-        splitter.border = JBUI.Borders.empty()
+        val splitter = JBSplitter(true, 0.35f).apply {
+            firstComponent  = editorWrapper
+            secondComponent = tabs
+            border = JBUI.Borders.empty()
+        }
 
-        val outer = JPanel(BorderLayout())
-        outer.add(splitter, BorderLayout.CENTER)
-        return outer
+        return JPanel(BorderLayout()).apply { add(splitter, BorderLayout.CENTER) }
     }
 
     private fun buildToolbar(): JPanel {
-        val panel = JPanel(FlowLayout(FlowLayout.LEFT, 4, 2))
-        panel.border = JBUI.Borders.customLine(JBUI.CurrentTheme.ToolWindow.borderColor(), 0, 0, 1, 0)
+        val panel = JPanel(FlowLayout(FlowLayout.LEFT, 4, 2)).apply {
+            border = JBUI.Borders.customLine(JBUI.CurrentTheme.ToolWindow.borderColor(), 0, 0, 1, 0)
+        }
 
-        val dbLabel = JBLabel("Database:")
         dbSelector.preferredSize = JBUI.size(160, 24)
 
         val executeBtn = JButton("Execute", AllIcons.Actions.Execute).apply {
@@ -125,14 +121,14 @@ class AqlConsoleWindow(private val project: Project, @Suppress("UNUSED_PARAMETER
             addActionListener { clearAll() }
         }
 
-        panel.add(dbLabel)
+        panel.add(JBLabel("Database:"))
         panel.add(dbSelector)
         panel.add(JSeparator(SwingConstants.VERTICAL).apply { preferredSize = JBUI.size(1, 20) })
         panel.add(executeBtn)
         panel.add(explainBtn)
         panel.add(clearBtn)
 
-        // Ctrl+Enter in editor triggers execute
+        // Ctrl+Enter in editor → execute
         editorField.addSettingsProvider { editor ->
             editor.contentComponent.getInputMap(JComponent.WHEN_FOCUSED).put(
                 KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, KeyEvent.CTRL_DOWN_MASK), "aql.execute"
@@ -152,25 +148,22 @@ class AqlConsoleWindow(private val project: Project, @Suppress("UNUSED_PARAMETER
             val entry = historyList.selectedValue ?: return@addListSelectionListener
             editorField.text = entry.query
         }
-        val scroll = JBScrollPane(historyList)
-
         val clearHistoryBtn = JButton("Clear History").apply {
             addActionListener {
                 historyModel.clear()
                 AqlConsoleStateService.getInstance(project).state.history.clear()
             }
         }
-        val panel = JPanel(BorderLayout())
-        panel.add(scroll, BorderLayout.CENTER)
-        panel.add(clearHistoryBtn, BorderLayout.SOUTH)
-        return panel
+        return JPanel(BorderLayout()).apply {
+            add(JBScrollPane(historyList), BorderLayout.CENTER)
+            add(clearHistoryBtn, BorderLayout.SOUTH)
+        }
     }
 
-    // ─── Event wiring ────────────────────────────────────────────────────────
+    // ─── Event wiring ─────────────────────────────────────────────────────────
 
     private fun wireEvents() {
-        // Persist editor content on every keystroke (in-memory update;
-        // IntelliJ flushes PersistentStateComponent to disk on IDE close / save-all).
+        // Persist editor content on every keystroke (in-memory; flushed on IDE close)
         editorField.addDocumentListener(editorTextListener)
 
         val bus = project.messageBus.connect(this)
@@ -179,8 +172,10 @@ class AqlConsoleWindow(private val project: Project, @Suppress("UNUSED_PARAMETER
             processResult(data)
         })
         bus.subscribe(ActionBusEvent.AQL_SYSTEM_EMPTY_LOG, ActionBusEvent { _ ->
-            jsonPanel.onClean(project)
-            graphPanel.clearData()
+            SwingUtilities.invokeLater {
+                resultsPanel.clear()
+                graphPanel.clearData()
+            }
         })
         bus.subscribe(ActionBusEvent.AQL_SYSTEM_REFRESH_SCHEME, ActionBusEvent { _ ->
             populateDatabaseSelector()
@@ -191,23 +186,22 @@ class AqlConsoleWindow(private val project: Project, @Suppress("UNUSED_PARAMETER
     }
 
     private fun processResult(data: ActionEventData) {
-        jsonPanel.onMessage(data, project)
+        val raw   = data.get(ActionEventData.KEY_RESULT) ?: return
+        val query = data.get(ActionEventData.KEY_QUERY)  ?: ""
 
-        val raw = data.get(ActionEventData.KEY_RESULT) ?: return
-        val query = data.get(ActionEventData.KEY_QUERY) ?: ""
+        // Service side-effect: expose last result for copy/export
+        project.getService(AqlResultService::class.java).lastResult = raw
 
-        // Persist last result (capped to avoid bloating workspace XML)
+        // Persist (capped to avoid bloating workspace XML)
         val consoleState = AqlConsoleStateService.getInstance(project).state
         consoleState.lastResult = raw.take(MAX_PERSISTED_RESULT_CHARS)
 
-        // Record in history
+        // Persist history
         val ts = LocalDateTime.now().format(TS_FMT)
         if (query.isNotBlank()) {
             SwingUtilities.invokeLater {
-                val entry = HistoryEntry(ts, query)
-                historyModel.insertElementAt(entry, 0)
+                historyModel.insertElementAt(HistoryEntry(ts, query), 0)
                 if (historyModel.size > 200) historyModel.removeElementAt(historyModel.size - 1)
-                // Sync history list to persisted state (newest-first, same order as model)
                 consoleState.history.clear()
                 consoleState.history.addAll(
                     (0 until historyModel.size).map { i ->
@@ -218,18 +212,16 @@ class AqlConsoleWindow(private val project: Project, @Suppress("UNUSED_PARAMETER
             }
         }
 
-        // Update graph and auto-switch tabs
+        // All Swing updates on EDT
         SwingUtilities.invokeLater {
+            resultsPanel.setData(raw)
             graphPanel.setData(raw)
-            if (raw.contains("\"_from\"") && raw.contains("\"_to\"")) {
-                tabs.selectedIndex = 1
-            } else {
-                tabs.selectedIndex = 0
-            }
+            // Auto-switch outer tab: Graph View for edge data, JSON Results otherwise
+            tabs.selectedIndex = if (raw.contains("\"_from\"") && raw.contains("\"_to\"")) 1 else 0
         }
     }
 
-    // ─── Actions ─────────────────────────────────────────────────────────────
+    // ─── Actions ──────────────────────────────────────────────────────────────
 
     private fun executeQuery() {
         val query = editorField.text.trim().ifEmpty { return }
@@ -247,12 +239,12 @@ class AqlConsoleWindow(private val project: Project, @Suppress("UNUSED_PARAMETER
 
     private fun clearAll() {
         editorField.text = ""
-        jsonPanel.onClean(project)
+        resultsPanel.clear()
         graphPanel.clearData()
         AqlConsoleStateService.getInstance(project).state.lastResult = ""
     }
 
-    // ─── Database selector ───────────────────────────────────────────────────
+    // ─── Database selector ────────────────────────────────────────────────────
 
     private fun wireDbSelector() {
         dbSelector.addActionListener {
@@ -270,9 +262,9 @@ class AqlConsoleWindow(private val project: Project, @Suppress("UNUSED_PARAMETER
     }
 
     private fun populateDatabaseSelector() {
-        val state = project.getService(DataWindowState::class.java).state
+        val state     = project.getService(DataWindowState::class.java).state
         val databases = state.databases.map { it.name ?: "" }.filter { it.isNotEmpty() }.sorted()
-        val selected = state.selectedDatabase?.name ?: state.selectedDatabaseName
+        val selected  = state.selectedDatabase?.name ?: state.selectedDatabaseName
 
         SwingUtilities.invokeLater {
             isUpdatingDbSelector = true
@@ -282,8 +274,8 @@ class AqlConsoleWindow(private val project: Project, @Suppress("UNUSED_PARAMETER
                 databases.forEach { dbSelector.addItem(it) }
                 when {
                     selected != null && databases.contains(selected) -> dbSelector.selectedItem = selected
-                    current != null && databases.contains(current) -> dbSelector.selectedItem = current
-                    databases.isNotEmpty() -> dbSelector.selectedIndex = 0
+                    current  != null && databases.contains(current)  -> dbSelector.selectedItem = current
+                    databases.isNotEmpty()                           -> dbSelector.selectedIndex = 0
                 }
             } finally {
                 isUpdatingDbSelector = false
@@ -291,22 +283,17 @@ class AqlConsoleWindow(private val project: Project, @Suppress("UNUSED_PARAMETER
         }
     }
 
-    // ─── Persistence ─────────────────────────────────────────────────────────
+    // ─── Persistence ──────────────────────────────────────────────────────────
 
-    /**
-     * Restores console state (history + last result) from the previous IDE session.
-     * Called once during [init], after the UI is fully built.
-     */
     private fun restorePersistedState() {
         val state = AqlConsoleStateService.getInstance(project).state
 
-        // Restore editor text — set directly; EditorTextField buffers it until the
-        // underlying editor is created, so no invokeLater needed here.
+        // Restore editor text (EditorTextField buffers until the underlying editor is created)
         if (state.editorText.isNotBlank()) {
             editorField.text = state.editorText
         }
 
-        // Restore history list (already newest-first in state)
+        // Restore history list (stored newest-first)
         if (state.history.isNotEmpty()) {
             SwingUtilities.invokeLater {
                 state.history.forEach { item ->
@@ -315,13 +302,15 @@ class AqlConsoleWindow(private val project: Project, @Suppress("UNUSED_PARAMETER
             }
         }
 
-        // Restore last result in the JSON panel
+        // Restore last result in the results panel
         if (state.lastResult.isNotBlank()) {
-            jsonPanel.restoreResult(state.lastResult)
+            SwingUtilities.invokeLater {
+                resultsPanel.restoreResult(state.lastResult)
+            }
         }
     }
 
-    // ─── Public API ──────────────────────────────────────────────────────────
+    // ─── Public API ───────────────────────────────────────────────────────────
 
     fun getContent(): JComponent = root
 
@@ -331,6 +320,5 @@ class AqlConsoleWindow(private val project: Project, @Suppress("UNUSED_PARAMETER
 
     override fun dispose() {
         editorField.removeDocumentListener(editorTextListener)
-        jsonPanel.dispose()
     }
 }
