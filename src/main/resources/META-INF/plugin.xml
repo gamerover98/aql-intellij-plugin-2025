@@ -18,8 +18,10 @@
                     factoryClass="com.arangodb.intellij.aql.toolWindow.ServerToolWindowFactory"
                     icon="/icons/toolbarArangoDB.png"/>
 
-        <!-- Issue 3/4: AQL Console is now an editor tab; the bottom tool window is removed. -->
+        <!-- AQL Console editor tab (singleton per project) -->
         <fileEditorProvider implementation="com.arangodb.intellij.aql.ui.console.AqlConsoleEditorProvider"/>
+        <!-- AQL Result editor tab (one per query execution) -->
+        <fileEditorProvider implementation="com.arangodb.intellij.aql.ui.console.AqlResultEditorProvider"/>
 
         <!--
           //############################################

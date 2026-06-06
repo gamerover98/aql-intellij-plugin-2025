@@ -126,9 +126,9 @@ class AqlDatabaseServiceImpl : AqlDatabaseService {
             val state = project.getService(com.arangodb.intellij.aql.ui.DataWindowState::class.java).state
                 ?: return emptyList()
             val db = getActiveDatabase(state, project)
-            // Sample up to 100 documents and collect unique top-level attribute names
+            // Sample up to 500 documents and collect unique top-level attribute names
             val cursor = db.query(
-                "FOR doc IN `$collectionName` LIMIT 100 RETURN KEYS(doc, false)",
+                "FOR doc IN `$collectionName` LIMIT 500 RETURN KEYS(doc, false)",
                 String::class.java
             )
             val fields = mutableSetOf<String>()
@@ -242,6 +242,17 @@ class AqlDatabaseServiceImpl : AqlDatabaseService {
             checkEmpty("user", user)
             checkEmpty("database", database)
             getDatabaseForName(settings, database!!)
+        } catch (e: AqlDataSourceException) {
+            throw e
+        } catch (e: Exception) {
+            throw AqlDataSourceException(e)
+        }
+
+    override fun getDatabaseForContext(settings: ArangoDbServer, databaseName: String, project: Project): ArangoDatabase =
+        try {
+            checkEmpty("user", settings.user)
+            checkEmpty("database", databaseName)
+            getDatabaseForName(settings, databaseName)
         } catch (e: AqlDataSourceException) {
             throw e
         } catch (e: Exception) {

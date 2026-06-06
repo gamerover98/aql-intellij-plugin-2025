@@ -74,19 +74,54 @@ class AqlDataService private constructor(private val project: Project) {
             && !Strings.isNullOrEmpty(state.host)
     }
 
-    fun executeQuery(query: String): AqlDataService =
-        executeQueryInternal(query, emptyMap(), QueryType.QUERY)
+    fun executeQuery(query: String, queryId: String = ""): AqlDataService =
+        executeQueryInternal(query, emptyMap(), QueryType.QUERY, queryId)
 
-    fun executeQuery(query: String, bindVars: Map<String, String>): AqlDataService =
-        executeQueryInternal(query, AqlUtils.convertValues(bindVars), QueryType.QUERY)
+    fun executeQuery(query: String, bindVars: Map<String, String>, queryId: String = ""): AqlDataService =
+        executeQueryInternal(query, AqlUtils.convertValues(bindVars), QueryType.QUERY, queryId)
 
-    fun explainQuery(query: String): AqlDataService =
-        executeQueryInternal(query, emptyMap(), QueryType.EXPLAIN_QUERY)
+    fun explainQuery(query: String, queryId: String = ""): AqlDataService =
+        executeQueryInternal(query, emptyMap(), QueryType.EXPLAIN_QUERY, queryId)
 
-    fun explainQuery(query: String, bindVars: Map<String, String>): AqlDataService =
-        executeQueryInternal(query, AqlUtils.convertValues(bindVars), QueryType.EXPLAIN_QUERY)
+    fun explainQuery(query: String, bindVars: Map<String, String>, queryId: String = ""): AqlDataService =
+        executeQueryInternal(query, AqlUtils.convertValues(bindVars), QueryType.EXPLAIN_QUERY, queryId)
 
-    private fun executeQueryInternal(query: String, bindVars: Map<String, Any>, type: QueryType): AqlDataService {
+    /**
+     * Executes [query] against [databaseName] on the current server, WITHOUT changing the
+     * globally-active database. Used when double-clicking a collection from a non-active DB.
+     */
+    fun executeQueryInContext(query: String, databaseName: String, queryId: String = ""): AqlDataService {
+        val state = project.getService(DataWindowState::class.java).state ?: return this
+        val queryPlanEvent = messageBus.syncPublisher(ActionBusEvent.AQL_QUERY_RESULT)
+        try {
+            val db = service.getDatabaseForContext(state, databaseName, project)
+            val items = db.query(query, emptyMap<String, Any>(), String::class.java).asListRemaining()
+            val result = when {
+                items.isEmpty() -> "[]"
+                items.size == 1 -> items[0]
+                else -> "[${items.joinToString(",")}]"
+            }
+            val data = ActionEventData(ActionEventData.KEY_QUERY, query)
+            data.set(ActionEventData.KEY_RESULT, result)
+            if (queryId.isNotBlank()) data.set(ActionEventData.KEY_QUERY_ID, queryId)
+            queryPlanEvent.onEvent(data)
+        } catch (e: ArangoDBException) {
+            val err = ActionEventData(ActionEventData.KEY_RESULT, e.message ?: "ArangoDB error")
+            if (queryId.isNotBlank()) err.set(ActionEventData.KEY_QUERY_ID, queryId)
+            queryPlanEvent.onEvent(err)
+        } catch (e: AqlDataSourceException) {
+            val err = ActionEventData(ActionEventData.KEY_RESULT, e.message ?: "Connection error")
+            if (queryId.isNotBlank()) err.set(ActionEventData.KEY_QUERY_ID, queryId)
+            queryPlanEvent.onEvent(err)
+        }
+        return this
+    }
+
+    fun getFieldNames(collectionName: String): List<String> =
+        try { service.getFieldNames(collectionName, project) } catch (_: Exception) { emptyList() }
+
+    private fun executeQueryInternal(query: String, bindVars: Map<String, Any>, type: QueryType,
+                                      queryId: String = ""): AqlDataService {
         val state = project.getService(DataWindowState::class.java).state ?: return this
         val queryPlanEvent = messageBus.syncPublisher(ActionBusEvent.AQL_QUERY_RESULT)
         try {
@@ -105,11 +140,16 @@ class AqlDataService private constructor(private val project: Project) {
             }
             val data = ActionEventData(ActionEventData.KEY_QUERY, query)
             data.set(ActionEventData.KEY_RESULT, result)
+            if (queryId.isNotBlank()) data.set(ActionEventData.KEY_QUERY_ID, queryId)
             queryPlanEvent.onEvent(data)
         } catch (e: ArangoDBException) {
-            queryPlanEvent.onEvent(ActionEventData(ActionEventData.KEY_RESULT, e.message))
+            val err = ActionEventData(ActionEventData.KEY_RESULT, e.message ?: "ArangoDB error")
+            if (queryId.isNotBlank()) err.set(ActionEventData.KEY_QUERY_ID, queryId)
+            queryPlanEvent.onEvent(err)
         } catch (e: AqlDataSourceException) {
-            queryPlanEvent.onEvent(ActionEventData(ActionEventData.KEY_RESULT, e.message))
+            val err = ActionEventData(ActionEventData.KEY_RESULT, e.message ?: "Connection error")
+            if (queryId.isNotBlank()) err.set(ActionEventData.KEY_QUERY_ID, queryId)
+            queryPlanEvent.onEvent(err)
         }
         return this
     }

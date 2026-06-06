@@ -7,6 +7,8 @@ class ActionEventData @JvmOverloads constructor(key: String? = null, value: Stri
         const val KEY_QUERY = "query"
         const val KEY_EVENT_NAME = "name"
         const val KEY_RESULT = "result"
+        /** Unique ID linking a query execution to its result tab. */
+        const val KEY_QUERY_ID = "queryId"
     }
 
     private val data: MutableMap<String, String> = HashMap()

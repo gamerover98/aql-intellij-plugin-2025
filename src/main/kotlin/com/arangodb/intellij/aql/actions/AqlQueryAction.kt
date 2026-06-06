@@ -3,6 +3,7 @@ package com.arangodb.intellij.aql.actions
 import com.arangodb.intellij.aql.model.AqlQuery
 import com.arangodb.intellij.aql.ui.dialogs.AqlParameterDialog
 import com.arangodb.intellij.aql.ui.console.AqlConsoleVirtualFile
+import com.arangodb.intellij.aql.ui.console.AqlResultVirtualFile
 import com.arangodb.intellij.aql.util.AQL_LANGUAGE_ID
 import com.arangodb.intellij.aql.util.AqlUtils
 import com.arangodb.intellij.aql.util.log
@@ -12,6 +13,7 @@ import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.actionSystem.PlatformDataKeys
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
+import java.util.UUID
 
 abstract class AqlQueryAction : AnAction() {
 
@@ -30,7 +32,7 @@ abstract class AqlQueryAction : AnAction() {
 
         val existing = service.getExistingQueryForValue(query)
         if (existing != null) {
-            execute(type, service, query, existing.getParameters())
+            execute(type, service, query, existing.getParameters(), project)
             return
         }
 
@@ -39,8 +41,7 @@ abstract class AqlQueryAction : AnAction() {
             val dialog = AqlParameterDialog(project, names, element)
             if (dialog.showAndGet()) {
                 val data = dialog.getData()
-                execute(type, service, query, data)
-                showConsole(project)
+                execute(type, service, query, data, project)
                 saveQuery(event, service, query, data)
             } else {
                 log.error("No parameters defined")
@@ -48,14 +49,18 @@ abstract class AqlQueryAction : AnAction() {
             return
         }
 
-        execute(type, service, query, emptyMap())
+        execute(type, service, query, emptyMap(), project)
         saveQuery(event, service, query, emptyMap())
-        showConsole(project)
     }
 
-    private fun execute(type: AqlDataService.QueryType, service: AqlDataService, query: String, data: Map<String, String>) {
-        if (type == AqlDataService.QueryType.QUERY) service.executeQuery(query, data)
-        else service.explainQuery(query, data)
+    private fun execute(type: AqlDataService.QueryType, service: AqlDataService, query: String,
+                        data: Map<String, String>, project: Project) {
+        val queryId = UUID.randomUUID().toString()
+        val label   = if (type == AqlDataService.QueryType.QUERY) "Result" else "Explain"
+        val resultFile = AqlResultVirtualFile(label, queryId)
+        FileEditorManager.getInstance(project).openFile(resultFile, true)
+        if (type == AqlDataService.QueryType.QUERY) service.executeQuery(query, data, queryId)
+        else service.explainQuery(query, data, queryId)
     }
 
     protected fun saveQuery(event: AnActionEvent, service: AqlDataService, query: String, data: Map<String, String>) {

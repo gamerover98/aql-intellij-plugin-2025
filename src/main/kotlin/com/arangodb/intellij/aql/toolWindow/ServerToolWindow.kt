@@ -5,7 +5,6 @@ import com.arangodb.intellij.aql.actions.ActionBusEvent
 import com.arangodb.intellij.aql.actions.AqlDataService
 import com.arangodb.intellij.aql.services.AqlConsoleStateService
 import com.arangodb.intellij.aql.services.ArangoProjectService
-import com.arangodb.intellij.aql.model.ArangoDbDatabase
 import com.arangodb.intellij.aql.model.ArangoDbServer
 import com.arangodb.intellij.aql.services.ServerListState
 import com.arangodb.intellij.aql.ui.DataWindowState
@@ -13,6 +12,7 @@ import com.arangodb.intellij.aql.ui.actions.*
 import com.arangodb.intellij.aql.ui.renderers.AqlNodeModel
 import com.arangodb.intellij.aql.ui.renderers.AqlNodeRenderer
 import com.arangodb.intellij.aql.ui.console.AqlConsoleVirtualFile
+import com.arangodb.intellij.aql.ui.console.AqlResultVirtualFile
 import com.arangodb.intellij.aql.util.Icons
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.Disposable
@@ -45,6 +45,7 @@ import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+import java.util.UUID
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
@@ -164,6 +165,15 @@ class ServerToolWindow(private val project: Project) : Disposable {
                 addExtraAction(ExpandAllAction(schemaTree))
                 addExtraAction(CollapseAllAction(schemaTree))
                 addExtraAction(SetActiveAction(project))
+                // Open AQL Console editor tab
+                addExtraAction(object : com.intellij.openapi.actionSystem.AnAction(
+                    "Open AQL Console",
+                    "Open the AQL query console as an editor tab",
+                    AllIcons.Debugger.Console
+                ) {
+                    override fun actionPerformed(e: AnActionEvent) = openInConsole()
+                    override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
+                })
                 // B4: Toggle system collections visibility
                 addExtraAction(object : ToggleAction(
                     "System Collections",
@@ -266,8 +276,10 @@ class ServerToolWindow(private val project: Project) : Disposable {
                 val colName = model.displayName ?: return
                 collectionDetailPanel.showLoading(colName)
                 ApplicationManager.getApplication().executeOnPooledThread {
-                    val indexes = AqlDataService.with(project).getCollectionIndexes(colName)
-                    SwingUtilities.invokeLater { collectionDetailPanel.showDetails(model, indexes) }
+                    val svc     = AqlDataService.with(project)
+                    val indexes = svc.getCollectionIndexes(colName)
+                    val fields  = svc.getFieldNames(colName)
+                    SwingUtilities.invokeLater { collectionDetailPanel.showDetails(model, indexes, fields) }
                 }
             }
         })
@@ -479,7 +491,7 @@ class ServerToolWindow(private val project: Project) : Disposable {
             AqlNodeModel.Type.COLLECTION, AqlNodeModel.Type.EDGE -> {
                 val colName = model.displayName ?: ""
                 menu.add(JMenuItem("Execute Sample Query", AllIcons.Actions.Execute).apply {
-                    addActionListener { executeSampleQuery(colName) }
+                    addActionListener { executeSampleQuery(colName, null) }
                 })
                 menu.addSeparator()
                 menu.add(JMenuItem("Copy Name", AllIcons.Actions.Copy).apply {
@@ -511,32 +523,28 @@ class ServerToolWindow(private val project: Project) : Disposable {
         val model = node.userObject as? AqlNodeModel ?: return
         if (model.type != AqlNodeModel.Type.COLLECTION && model.type != AqlNodeModel.Type.EDGE) return
 
-        // Issue 2: walk up the path to find the DATABASE ancestor and activate it
-        // silently (without a full refreshSchema() that would re-populate the tree).
+        // Walk up the path to find the DATABASE ancestor — used as query context (not global state).
         val dbModel = path.path
             .mapNotNull { (it as? CheckedTreeNode)?.userObject as? AqlNodeModel }
             .lastOrNull { it.type == AqlNodeModel.Type.DATABASE }
 
-        if (dbModel != null && !dbModel.isSelected) {
-            val state = project.getService(DataWindowState::class.java).state ?: return
-            state.selectedDatabase = ArangoDbDatabase(dbModel.name ?: "")
-            dbModel.isSelected = true
-            node.parent?.let { parent ->
-                (schemaTree.model as? DefaultTreeModel)?.nodeChanged(parent)
-            }
-        }
-
-        executeSampleQuery(model.displayName ?: return)
+        executeSampleQuery(model.displayName ?: return, dbModel?.name)
     }
 
-    private fun executeSampleQuery(collectionName: String) {
-        AqlDataService.with(project)
-            .executeQuery("FOR doc IN `$collectionName` LIMIT 100 RETURN doc")
-        openInConsole()
+    private fun executeSampleQuery(collectionName: String, databaseName: String?) {
+        val query   = "FOR doc IN `$collectionName` LIMIT 100 RETURN doc"
+        val queryId = UUID.randomUUID().toString()
+        // Open a dedicated result tab that will receive this execution's result
+        val resultFile = AqlResultVirtualFile(collectionName, queryId)
+        FileEditorManager.getInstance(project).openFile(resultFile, true)
+        ApplicationManager.getApplication().executeOnPooledThread {
+            val svc = AqlDataService.with(project)
+            if (databaseName != null) svc.executeQueryInContext(query, databaseName, queryId)
+            else svc.executeQuery(query, queryId)
+        }
     }
 
     private fun openInConsole() {
-        // Issue 3/4: open (or re-focus) the AQL Console as an editor tab
         val file = AqlConsoleVirtualFile.getInstance(project)
         FileEditorManager.getInstance(project).openFile(file, true)
     }

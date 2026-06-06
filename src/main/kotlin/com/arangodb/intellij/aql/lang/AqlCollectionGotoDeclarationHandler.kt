@@ -4,19 +4,20 @@ import com.arangodb.intellij.aql.actions.AqlDataService
 import com.arangodb.intellij.aql.db.AqlDatabaseService
 import com.arangodb.intellij.aql.grammar.custom.psi.AqlMixinType
 import com.arangodb.intellij.aql.grammar.custom.psi.AqlNamedElement
-import com.arangodb.intellij.aql.ui.console.AqlConsoleVirtualFile
+import com.arangodb.intellij.aql.ui.console.AqlResultVirtualFile
 import com.intellij.codeInsight.navigation.actions.GotoDeclarationHandler
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.psi.PsiElement
+import java.util.UUID
 
 /**
  * Handles Ctrl+Click on ArangoDB collection, graph, or view names in AQL files.
  *
  * Instead of navigating to a PSI element (collections are not source code),
- * this handler executes a browse query that shows the collection's data in the
- * ArangoDB Console tool window.
+ * this handler executes a browse query and opens the result in a dedicated
+ * AQL Result editor tab.
  */
 class AqlCollectionGotoDeclarationHandler : GotoDeclarationHandler {
 
@@ -50,14 +51,17 @@ class AqlCollectionGotoDeclarationHandler : GotoDeclarationHandler {
             else -> "FOR doc IN `$name` LIMIT 100 RETURN doc"
         }
 
-        // Execute on EDT after current action completes, then open the console editor tab
+        // Open a result tab, then execute the query on a pooled thread
         ApplicationManager.getApplication().invokeLater {
-            AqlDataService.with(project).executeQuery(query)
-            FileEditorManager.getInstance(project)
-                .openFile(AqlConsoleVirtualFile.getInstance(project), true)
+            val queryId    = UUID.randomUUID().toString()
+            val resultFile = AqlResultVirtualFile(name, queryId)
+            FileEditorManager.getInstance(project).openFile(resultFile, true)
+            ApplicationManager.getApplication().executeOnPooledThread {
+                AqlDataService.with(project).executeQuery(query, queryId)
+            }
         }
 
-        // Return empty array: we handled navigation ourselves (data shown in console)
+        // Return empty array: we handled navigation ourselves (data shown in result tab)
         return PsiElement.EMPTY_ARRAY
     }
 }

@@ -50,12 +50,20 @@ class CollectionDetailPanel : JPanel(BorderLayout()) {
         columnModel.getColumn(4).preferredWidth = 60
     }
 
+    /** Shows sampled document field names below the index table. */
+    private val fieldsLabel = JLabel("Fields: —").apply {
+        horizontalAlignment = SwingConstants.LEFT
+        border = JBUI.Borders.empty(4, 8)
+        font = font.deriveFont(Font.PLAIN)
+    }
+
     init {
         border = JBUI.Borders.customLine(JBColor.border(), 1, 0, 0, 0)
         add(header, BorderLayout.NORTH)
         add(JBScrollPane(table).apply {
             border = JBUI.Borders.empty()
         }, BorderLayout.CENTER)
+        add(fieldsLabel, BorderLayout.SOUTH)
     }
 
     // ─── State transitions ────────────────────────────────────────────────────
@@ -66,6 +74,7 @@ class CollectionDetailPanel : JPanel(BorderLayout()) {
         header.font = header.font.deriveFont(Font.ITALIC)
         header.foreground = JBColor.GRAY
         tableModel.rowCount = 0
+        fieldsLabel.text = "Fields: —"
     }
 
     fun showLoading(collectionName: String) {
@@ -74,9 +83,10 @@ class CollectionDetailPanel : JPanel(BorderLayout()) {
         header.font = header.font.deriveFont(Font.ITALIC)
         header.foreground = JBColor.GRAY
         tableModel.rowCount = 0
+        fieldsLabel.text = "Fields: loading…"
     }
 
-    fun showDetails(model: AqlNodeModel, indexes: List<IndexEntity>) {
+    fun showDetails(model: AqlNodeModel, indexes: List<IndexEntity>, fields: List<String> = emptyList()) {
         val name      = model.displayName ?: ""
         val count     = model.count
         val countPart = if (count != null && count >= 0)
@@ -98,5 +108,8 @@ class CollectionDetailPanel : JPanel(BorderLayout()) {
                 if (idx.sparse == true) "✓" else "–"
             ))
         }
+
+        fieldsLabel.text = if (fields.isEmpty()) "Fields: —"
+                           else "<html><b>Fields:</b> ${fields.joinToString(", ")}</html>"
     }
 }

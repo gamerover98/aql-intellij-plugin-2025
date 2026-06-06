@@ -1,20 +1,18 @@
 package com.arangodb.intellij.aql.ui.console
 
 import com.arangodb.intellij.aql.actions.ActionBusEvent
-import com.arangodb.intellij.aql.actions.ActionEventData
 import com.arangodb.intellij.aql.actions.AqlDataService
 import com.arangodb.intellij.aql.lang.AqlLanguage
 import com.arangodb.intellij.aql.services.AqlConsoleStateService
-import com.arangodb.intellij.aql.services.AqlResultService
 import com.arangodb.intellij.aql.ui.DataWindowState
-import com.arangodb.intellij.aql.ui.panels.AqlGraphPanel
-import com.arangodb.intellij.aql.ui.panels.ResultsPanel
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.editor.event.DocumentEvent
 import com.intellij.openapi.editor.event.DocumentListener
 import com.intellij.openapi.fileEditor.FileEditor
+import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.FileEditorState
+import com.intellij.openapi.fileEditor.FileEditorStateLevel
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.util.UserDataHolderBase
@@ -33,18 +31,22 @@ import java.beans.PropertyChangeListener
 import java.beans.PropertyChangeSupport
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.util.UUID
 import javax.swing.*
 
 /**
- * AQL Console as an IntelliJ editor tab.
+ * AQL Console as an IntelliJ editor tab — editor-only half.
  *
  * Contains:
  *  - A [LanguageTextField] for composing AQL queries (with AQL syntax highlighting)
  *  - A toolbar: DB selector, Execute, Explain, Clear buttons
- *  - A results area split into: JSON Results tab, Graph View tab, Query History tab
+ *  - A Query History panel
  *
- * Replaces the old bottom tool window [com.arangodb.intellij.aql.ui.windows.AqlConsoleWindow].
- * State (editor text, history, last result) is persisted via [AqlConsoleStateService].
+ * When Execute is clicked a new [AqlResultVirtualFile] / [AqlResultFileEditor] tab is
+ * opened for that execution. Multiple result tabs can coexist simultaneously.
+ *
+ * Replaces the old [com.arangodb.intellij.aql.ui.windows.AqlConsoleWindow].
+ * State (editor text, history) is persisted via [AqlConsoleStateService].
  */
 class AqlConsoleFileEditor(
     private val project: Project,
@@ -53,15 +55,14 @@ class AqlConsoleFileEditor(
 
     companion object {
         private val TS_FMT = DateTimeFormatter.ofPattern("HH:mm:ss")
-        private const val MAX_PERSISTED_RESULT_CHARS = 200_000
     }
 
-    // ─── UserDataHolder delegation ────────────────────────────────────────────
+    // ─── UserDataHolder delegation ─────────────────────────────────────────────
     private val userDataHolder = UserDataHolderBase()
     override fun <T : Any?> getUserData(key: Key<T>): T? = userDataHolder.getUserData(key)
     override fun <T : Any?> putUserData(key: Key<T>, value: T?) = userDataHolder.putUserData(key, value)
 
-    // ─── Property change support ──────────────────────────────────────────────
+    // ─── Property change support ───────────────────────────────────────────────
     private val pcs = PropertyChangeSupport(this)
     override fun addPropertyChangeListener(listener: PropertyChangeListener) =
         pcs.addPropertyChangeListener(listener)
@@ -79,10 +80,8 @@ class AqlConsoleFileEditor(
     // ─── Toolbar ──────────────────────────────────────────────────────────────
     private val dbSelector = JComboBox<String>()
     private var isUpdatingDbSelector = false
-
-    // ─── Result panels ────────────────────────────────────────────────────────
-    private val resultsPanel = ResultsPanel(project)
-    private val graphPanel   = AqlGraphPanel()
+    private var executeBtn: JButton? = null
+    private var explainBtn: JButton? = null
 
     // ─── History ──────────────────────────────────────────────────────────────
     private val historyModel = DefaultListModel<HistoryEntry>()
@@ -90,7 +89,6 @@ class AqlConsoleFileEditor(
     private var isRestoringHistory = false
 
     // ─── Root component ───────────────────────────────────────────────────────
-    private val tabs = JBTabbedPane()
     private val root: JComponent
 
     // ─── Message bus connection ───────────────────────────────────────────────
@@ -119,13 +117,13 @@ class AqlConsoleFileEditor(
             border = JBUI.Borders.empty()
         }
 
-        tabs.addTab("JSON Results",  AllIcons.FileTypes.Json,  resultsPanel.component)
-        tabs.addTab("Graph View",    AllIcons.Nodes.Related,   graphPanel)
-        tabs.addTab("Query History", AllIcons.Vcs.History,     buildHistoryPanel())
+        val historyPane = JBTabbedPane().apply {
+            addTab("Query History", AllIcons.Vcs.History, buildHistoryPanel())
+        }
 
-        val splitter = JBSplitter(true, 0.35f).apply {
+        val splitter = JBSplitter(true, 0.65f).apply {
             firstComponent  = editorWrapper
-            secondComponent = tabs
+            secondComponent = historyPane
             border = JBUI.Borders.empty()
         }
 
@@ -139,17 +137,17 @@ class AqlConsoleFileEditor(
 
         dbSelector.preferredSize = JBUI.size(160, 24)
 
-        val executeBtn = JButton("Execute", AllIcons.Actions.Execute).apply {
+        executeBtn = JButton("Execute", AllIcons.Actions.Execute).apply {
             toolTipText = "Execute query (Ctrl+Enter)"
             addActionListener { executeQuery() }
         }
-        val explainBtn = JButton("Explain", AllIcons.Actions.Preview).apply {
+        explainBtn = JButton("Explain", AllIcons.Actions.Preview).apply {
             toolTipText = "Explain query"
             addActionListener { explainQuery() }
         }
         val clearBtn = JButton("Clear", AllIcons.Actions.GC).apply {
-            toolTipText = "Clear editor and results"
-            addActionListener { clearAll() }
+            toolTipText = "Clear editor"
+            addActionListener { clearEditor() }
         }
 
         panel.add(JBLabel("Database:"))
@@ -159,6 +157,7 @@ class AqlConsoleFileEditor(
         panel.add(explainBtn)
         panel.add(clearBtn)
 
+        // Ctrl+Enter in editor → execute
         editorField.addSettingsProvider { editor ->
             editor.contentComponent.getInputMap(JComponent.WHEN_FOCUSED).put(
                 KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, KeyEvent.CTRL_DOWN_MASK), "aql.execute"
@@ -195,13 +194,23 @@ class AqlConsoleFileEditor(
     private fun wireEvents() {
         editorField.addDocumentListener(editorTextListener)
 
+        // Add to history when a query result arrives (any query, not filtered by ID here)
         busConnection.subscribe(ActionBusEvent.AQL_QUERY_RESULT, ActionBusEvent { data ->
-            processResult(data)
-        })
-        busConnection.subscribe(ActionBusEvent.AQL_SYSTEM_EMPTY_LOG, ActionBusEvent { _ ->
+            val query = data.get(com.arangodb.intellij.aql.actions.ActionEventData.KEY_QUERY) ?: return@ActionBusEvent
+            if (query.isBlank()) return@ActionBusEvent
+            val ts = LocalDateTime.now().format(TS_FMT)
             SwingUtilities.invokeLater {
-                resultsPanel.clear()
-                graphPanel.clearData()
+                historyList.clearSelection()
+                historyModel.insertElementAt(HistoryEntry(ts, query), 0)
+                if (historyModel.size > 200) historyModel.removeElementAt(historyModel.size - 1)
+                val consoleState = AqlConsoleStateService.getInstance(project).state
+                consoleState.history.clear()
+                consoleState.history.addAll(
+                    (0 until historyModel.size).map { i ->
+                        val e = historyModel.getElementAt(i)
+                        AqlConsoleStateService.HistoryItem(e.timestamp, e.query)
+                    }
+                )
             }
         })
         busConnection.subscribe(ActionBusEvent.AQL_SYSTEM_REFRESH_SCHEME, ActionBusEvent { _ ->
@@ -212,59 +221,47 @@ class AqlConsoleFileEditor(
         })
     }
 
-    private fun processResult(data: ActionEventData) {
-        val raw   = data.get(ActionEventData.KEY_RESULT) ?: return
-        val query = data.get(ActionEventData.KEY_QUERY)  ?: ""
-
-        project.getService(AqlResultService::class.java).lastResult = raw
-
-        val consoleState = AqlConsoleStateService.getInstance(project).state
-        consoleState.lastResult = raw.take(MAX_PERSISTED_RESULT_CHARS)
-
-        val ts = LocalDateTime.now().format(TS_FMT)
-        if (query.isNotBlank()) {
-            SwingUtilities.invokeLater {
-                historyList.clearSelection()
-                historyModel.insertElementAt(HistoryEntry(ts, query), 0)
-                if (historyModel.size > 200) historyModel.removeElementAt(historyModel.size - 1)
-                consoleState.history.clear()
-                consoleState.history.addAll(
-                    (0 until historyModel.size).map { i ->
-                        val e = historyModel.getElementAt(i)
-                        AqlConsoleStateService.HistoryItem(e.timestamp, e.query)
-                    }
-                )
-            }
-        }
-
-        SwingUtilities.invokeLater {
-            resultsPanel.setData(raw)
-            graphPanel.setData(raw)
-            tabs.selectedIndex = if (raw.contains("\"_from\"") && raw.contains("\"_to\"")) 1 else 0
-        }
-    }
-
     // ─── Actions ──────────────────────────────────────────────────────────────
 
     private fun executeQuery() {
         val query = editorField.text.trim().ifEmpty { return }
+        val queryId = UUID.randomUUID().toString()
+        val resultFile = AqlResultVirtualFile("Result", queryId)
+        FileEditorManager.getInstance(project).openFile(resultFile, true)
+        setRunningState(true)
         ApplicationManager.getApplication().executeOnPooledThread {
-            AqlDataService.with(project).executeQuery(query)
+            try {
+                AqlDataService.with(project).executeQuery(query, queryId)
+            } finally {
+                SwingUtilities.invokeLater { setRunningState(false) }
+            }
         }
     }
 
     private fun explainQuery() {
         val query = editorField.text.trim().ifEmpty { return }
+        val queryId = UUID.randomUUID().toString()
+        val resultFile = AqlResultVirtualFile("Explain", queryId)
+        FileEditorManager.getInstance(project).openFile(resultFile, true)
+        setRunningState(true)
         ApplicationManager.getApplication().executeOnPooledThread {
-            AqlDataService.with(project).explainQuery(query)
+            try {
+                AqlDataService.with(project).explainQuery(query, queryId)
+            } finally {
+                SwingUtilities.invokeLater { setRunningState(false) }
+            }
         }
     }
 
-    private fun clearAll() {
+    private fun clearEditor() {
         editorField.text = ""
-        resultsPanel.clear()
-        graphPanel.clearData()
-        AqlConsoleStateService.getInstance(project).state.lastResult = ""
+        AqlConsoleStateService.getInstance(project).state.editorText = ""
+    }
+
+    /** Disables/enables the Execute and Explain buttons while a query is in flight. */
+    private fun setRunningState(running: Boolean) {
+        executeBtn?.isEnabled = !running
+        explainBtn?.isEnabled = !running
     }
 
     // ─── Database selector ────────────────────────────────────────────────────
@@ -329,31 +326,17 @@ class AqlConsoleFileEditor(
                 }
             }
         }
-
-        if (state.lastResult.isNotBlank()) {
-            SwingUtilities.invokeLater {
-                resultsPanel.restoreResult(state.lastResult)
-            }
-        }
     }
 
     // ─── FileEditor interface ─────────────────────────────────────────────────
 
     override fun getComponent(): JComponent = root
-
     override fun getPreferredFocusedComponent(): JComponent = editorField
-
     override fun getName(): String = "AQL Console"
-
     override fun getFile(): VirtualFile = virtualFile
-
-    override fun getState(level: com.intellij.openapi.fileEditor.FileEditorStateLevel): FileEditorState =
-        FileEditorState.INSTANCE
-
-    override fun setState(state: FileEditorState) { /* state managed by AqlConsoleStateService */ }
-
+    override fun getState(level: FileEditorStateLevel): FileEditorState = FileEditorState.INSTANCE
+    override fun setState(state: FileEditorState) {}
     override fun isModified(): Boolean = false
-
     override fun isValid(): Boolean = !project.isDisposed
 
     override fun dispose() {
