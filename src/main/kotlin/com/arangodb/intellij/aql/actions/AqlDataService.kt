@@ -226,6 +226,7 @@ class AqlDataService private constructor(private val project: Project) {
 
             val collections = database.collections ?: emptyList()
 
+            // Regular (non-edge, non-system) collections
             for (entity in collections) {
                 if (entity.type == CollectionType.EDGES) continue
                 val entityName = entity.name ?: continue
@@ -234,12 +235,13 @@ class AqlDataService private constructor(private val project: Project) {
                 node.userObject = AqlNodeModel("", entityName, AqlNodeModel.Type.COLLECTION)
                 dbNode.add(node)
             }
+            // Edge collections (non-system) — properly typed as EDGE
             for (entity in collections) {
                 if (entity.type != CollectionType.EDGES) continue
                 val entityName = entity.name ?: continue
                 if (entityName.startsWith("_")) continue
                 val node = CheckedTreeNode()
-                node.userObject = AqlNodeModel("", entityName, AqlNodeModel.Type.COLLECTION)
+                node.userObject = AqlNodeModel("", entityName, AqlNodeModel.Type.EDGE)
                 dbNode.add(node)
             }
             for (entity in database.graphs ?: emptyList()) {
@@ -252,17 +254,28 @@ class AqlDataService private constructor(private val project: Project) {
                 node.userObject = AqlNodeModel("", entity.name, AqlNodeModel.Type.VIEW)
                 dbNode.add(node)
             }
-            for (entity in collections) {
-                val entityName = entity.name ?: continue
-                if (!entityName.startsWith("_")) continue
-                val node = CheckedTreeNode()
-                val collectionType = if (entity.type == CollectionType.EDGES) AqlNodeModel.Type.EDGE else AqlNodeModel.Type.COLLECTION
-                node.userObject = AqlNodeModel("", entityName, collectionType)
-                dbNode.add(node)
+            // A4: System collections grouped under a collapsible "System (N)" folder
+            val sysEntities = collections.filter { (it.name ?: "").startsWith("_") }
+            if (sysEntities.isNotEmpty()) {
+                val sysModel = AqlNodeModel("", "System (${sysEntities.size})", AqlNodeModel.Type.CATEGORY)
+                val sysNode = CheckedTreeNode().also { it.userObject = sysModel }
+                dbNode.add(sysNode)
+                for (entity in sysEntities) {
+                    val entityName = entity.name ?: continue
+                    val colType = if (entity.type == CollectionType.EDGES) AqlNodeModel.Type.EDGE
+                                  else AqlNodeModel.Type.COLLECTION
+                    val node = CheckedTreeNode()
+                    node.userObject = AqlNodeModel("", entityName, colType)
+                    sysNode.add(node)
+                }
             }
         }
         return DefaultTreeModel(root)
     }
+
+    /** Convenience wrapper used by [com.arangodb.intellij.aql.toolWindow.ServerToolWindow]. */
+    fun getCollectionCount(collectionName: String): Long =
+        service.getCollectionCount(collectionName, project)
 
     fun hasValidConnection(): Boolean =
         hasValidSettings() && service.isConnectionValid(project)
