@@ -123,6 +123,7 @@
       <projectService serviceInterface="com.arangodb.intellij.aql.db.AqlDatabaseService"
                       serviceImplementation="com.arangodb.intellij.aql.db.AqlDatabaseServiceImpl"/>
       <projectService serviceImplementation="com.arangodb.intellij.aql.ui.DataWindowState"/>
+      <projectService serviceImplementation="com.arangodb.intellij.aql.services.AqlConsoleStateService"/>
 
         <intentionAction>
             <language>AQL</language>

@@ -6,6 +6,7 @@ import com.arangodb.intellij.aql.actions.AqlDataService
 import com.arangodb.intellij.aql.lang.AqlLanguage
 import com.arangodb.intellij.aql.model.AqlQuery
 import com.arangodb.intellij.aql.model.ArangoDbDatabase
+import com.arangodb.intellij.aql.services.AqlConsoleStateService
 import com.arangodb.intellij.aql.ui.DataWindowState
 import com.arangodb.intellij.aql.ui.panels.AqlGraphPanel
 import com.arangodb.intellij.aql.ui.panels.JsonPanel
@@ -34,6 +35,8 @@ class AqlConsoleWindow(private val project: Project, @Suppress("UNUSED_PARAMETER
     companion object {
         const val WINDOW_ID = "ArangoDB Console"
         private val TS_FMT = DateTimeFormatter.ofPattern("HH:mm:ss")
+        /** Cap on the persisted raw-result size to avoid bloating the workspace XML. */
+        private const val MAX_PERSISTED_RESULT_CHARS = 200_000
     }
 
     // ─── Editor area ────────────────────────────────────────────────────────
@@ -64,6 +67,7 @@ class AqlConsoleWindow(private val project: Project, @Suppress("UNUSED_PARAMETER
         wireDbSelector()
         wireEvents()
         populateDatabaseSelector()
+        restorePersistedState()
     }
 
     // ─── UI construction ────────────────────────────────────────────────────
@@ -144,7 +148,10 @@ class AqlConsoleWindow(private val project: Project, @Suppress("UNUSED_PARAMETER
         val scroll = JBScrollPane(historyList)
 
         val clearHistoryBtn = JButton("Clear History").apply {
-            addActionListener { historyModel.clear() }
+            addActionListener {
+                historyModel.clear()
+                AqlConsoleStateService.getInstance(project).state.history.clear()
+            }
         }
         val panel = JPanel(BorderLayout())
         panel.add(scroll, BorderLayout.CENTER)
@@ -178,12 +185,25 @@ class AqlConsoleWindow(private val project: Project, @Suppress("UNUSED_PARAMETER
         val raw = data.get(ActionEventData.KEY_RESULT) ?: return
         val query = data.get(ActionEventData.KEY_QUERY) ?: ""
 
+        // Persist last result (capped to avoid bloating workspace XML)
+        val consoleState = AqlConsoleStateService.getInstance(project).state
+        consoleState.lastResult = raw.take(MAX_PERSISTED_RESULT_CHARS)
+
         // Record in history
         val ts = LocalDateTime.now().format(TS_FMT)
         if (query.isNotBlank()) {
             SwingUtilities.invokeLater {
-                historyModel.insertElementAt(HistoryEntry(ts, query), 0)
+                val entry = HistoryEntry(ts, query)
+                historyModel.insertElementAt(entry, 0)
                 if (historyModel.size > 200) historyModel.removeElementAt(historyModel.size - 1)
+                // Sync history list to persisted state (newest-first, same order as model)
+                consoleState.history.clear()
+                consoleState.history.addAll(
+                    (0 until historyModel.size).map { i ->
+                        val e = historyModel.getElementAt(i)
+                        AqlConsoleStateService.HistoryItem(e.timestamp, e.query)
+                    }
+                )
             }
         }
 
@@ -218,6 +238,7 @@ class AqlConsoleWindow(private val project: Project, @Suppress("UNUSED_PARAMETER
         editorField.text = ""
         jsonPanel.onClean(project)
         graphPanel.clearData()
+        AqlConsoleStateService.getInstance(project).state.lastResult = ""
     }
 
     // ─── Database selector ───────────────────────────────────────────────────
@@ -256,6 +277,30 @@ class AqlConsoleWindow(private val project: Project, @Suppress("UNUSED_PARAMETER
             } finally {
                 isUpdatingDbSelector = false
             }
+        }
+    }
+
+    // ─── Persistence ─────────────────────────────────────────────────────────
+
+    /**
+     * Restores console state (history + last result) from the previous IDE session.
+     * Called once during [init], after the UI is fully built.
+     */
+    private fun restorePersistedState() {
+        val state = AqlConsoleStateService.getInstance(project).state
+
+        // Restore history list (already newest-first in state)
+        if (state.history.isNotEmpty()) {
+            SwingUtilities.invokeLater {
+                state.history.forEach { item ->
+                    historyModel.addElement(HistoryEntry(item.timestamp, item.query))
+                }
+            }
+        }
+
+        // Restore last result in the JSON panel
+        if (state.lastResult.isNotBlank()) {
+            jsonPanel.restoreResult(state.lastResult)
         }
     }
 

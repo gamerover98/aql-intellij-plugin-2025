@@ -42,6 +42,24 @@ class JsonPanel(project: Project) : ConsoleViewImpl(project, true), Disposable, 
         }
     }
 
+    /**
+     * Restores a previously persisted result on IDE startup (no [AqlResultService] side-effect).
+     * Uses the same pretty-print + CRLF-normalisation logic as [onMessage].
+     */
+    fun restoreResult(raw: String) {
+        if (raw.isBlank()) return
+        val pretty = try {
+            mapper.writeValueAsString(mapper.readTree(raw)).replace("\r\n", "\n").replace("\r", "\n")
+        } catch (_: Exception) {
+            raw.replace("\r\n", "\n").replace("\r", "\n")
+        }
+        ApplicationManager.getApplication().invokeLater {
+            WriteAction.run<Exception> {
+                editor?.document?.setText(pretty)
+            }
+        }
+    }
+
     override fun onClean(project: Project) {
         ApplicationManager.getApplication().invokeLater {
             WriteAction.run<Exception> {
