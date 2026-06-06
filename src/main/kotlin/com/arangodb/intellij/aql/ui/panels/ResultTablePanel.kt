@@ -36,6 +36,7 @@ import javax.swing.KeyStroke
 import javax.swing.ListSelectionModel
 import javax.swing.SwingConstants
 import javax.swing.SwingUtilities
+import javax.swing.Timer
 import javax.swing.table.DefaultTableCellRenderer
 import javax.swing.table.DefaultTableModel
 import javax.swing.table.TableRowSorter
@@ -62,6 +63,14 @@ class ResultTablePanel(private val project: Project) : JPanel(BorderLayout()) {
 
     private val mapper = ObjectMapper()
     private var lastRawJson = ""
+
+    // ─── Toolbar buttons (kept as fields for copy feedback) ───────────────────
+    private lateinit var copyRowBtn: JButton
+    private lateinit var copyJsonBtn: JButton
+    private lateinit var copyStringBtn: JButton
+
+    /** Active feedback timer — cancelled if another copy fires before it expires. */
+    private var feedbackTimer: Timer? = null
 
     // ─── Model & table ────────────────────────────────────────────────────────
 
@@ -221,35 +230,38 @@ class ResultTablePanel(private val project: Project) : JPanel(BorderLayout()) {
 
     private fun buildToolbar(): JPanel = JPanel(FlowLayout(FlowLayout.LEFT, 4, 2)).apply {
         border = JBUI.Borders.customLine(JBColor.border(), 0, 0, 1, 0)
-        add(JButton("Copy Row", AllIcons.Actions.Copy).apply {
+        copyRowBtn = JButton("Copy Row", AllIcons.Actions.Copy).apply {
             toolTipText = "Copy selected row as a JSON object"
-            addActionListener { copySelectedRow() }
-        })
-        add(JButton("Copy JSON", AllIcons.FileTypes.Json).apply {
-            toolTipText = "Copy all results as JSON"
-            addActionListener { copyAllAsJson() }
-        })
-        add(JButton("Copy as String", AllIcons.FileTypes.Text).apply {
+            addActionListener { copySelectedRow(); showButtonFeedback(copyRowBtn) }
+        }
+        copyJsonBtn = JButton("Copy JSON", AllIcons.FileTypes.Json).apply {
+            toolTipText = "Copy all results as formatted JSON"
+            addActionListener { copyAllAsJson(); showButtonFeedback(copyJsonBtn) }
+        }
+        copyStringBtn = JButton("Copy as String", AllIcons.FileTypes.Text).apply {
             toolTipText = "Copy all results as an escaped JSON string"
-            addActionListener { copyAllAsString() }
-        })
+            addActionListener { copyAllAsString(); showButtonFeedback(copyStringBtn) }
+        }
+        add(copyRowBtn)
+        add(copyJsonBtn)
+        add(copyStringBtn)
     }
 
     // ─── Context menu ─────────────────────────────────────────────────────────
 
     private fun buildContextMenu(): JPopupMenu = JPopupMenu().apply {
         add(JMenuItem("Copy Cell Value", AllIcons.Actions.Copy).apply {
-            addActionListener { copySelectedCell() }
+            addActionListener { copySelectedCell(); showStatusFeedback() }
         })
         add(JMenuItem("Copy Row as JSON").apply {
-            addActionListener { copySelectedRow() }
+            addActionListener { copySelectedRow(); showStatusFeedback() }
         })
         add(JSeparator())
         add(JMenuItem("Copy All as JSON", AllIcons.FileTypes.Json).apply {
-            addActionListener { copyAllAsJson() }
+            addActionListener { copyAllAsJson(); showStatusFeedback() }
         })
         add(JMenuItem("Copy All as String", AllIcons.FileTypes.Text).apply {
-            addActionListener { copyAllAsString() }
+            addActionListener { copyAllAsString(); showStatusFeedback() }
         })
         add(JSeparator())
         add(JMenuItem("Navigate to Class", AllIcons.Actions.Find).apply {
@@ -325,7 +337,14 @@ class ResultTablePanel(private val project: Project) : JPanel(BorderLayout()) {
         toClipboard(mapper.writerWithDefaultPrettyPrinter().writeValueAsString(map))
     }
 
-    private fun copyAllAsJson() = toClipboard(lastRawJson)
+    private fun copyAllAsJson() {
+        val formatted = try {
+            mapper.writerWithDefaultPrettyPrinter()
+                .writeValueAsString(mapper.readTree(lastRawJson))
+                .replace("\r\n", "\n").replace("\r", "\n")
+        } catch (_: Exception) { lastRawJson }
+        toClipboard(formatted)
+    }
 
     private fun copyAllAsString() {
         val compact = try {
@@ -333,6 +352,44 @@ class ResultTablePanel(private val project: Project) : JPanel(BorderLayout()) {
         } catch (_: Exception) { lastRawJson }
         val escaped = compact.replace("\\", "\\\\").replace("\"", "\\\"")
         toClipboard("\"$escaped\"")
+    }
+
+    // ─── Copy feedback ────────────────────────────────────────────────────────
+
+    /**
+     * Temporarily changes a toolbar [button] to show a green "Copied!" state
+     * for 1.5 s, then restores the original text/icon.
+     */
+    private fun showButtonFeedback(button: JButton) {
+        feedbackTimer?.stop()
+        val origText = button.text
+        val origIcon = button.icon
+        button.text = "Copied!"
+        button.icon = AllIcons.General.InspectionsOK
+        button.foreground = JBColor(Color(0x2E7D32), Color(0x66BB6A))
+        button.isEnabled = false
+        feedbackTimer = Timer(1500) {
+            button.text = origText
+            button.icon = origIcon
+            button.foreground = JBColor.foreground()
+            button.isEnabled = true
+        }.also { it.isRepeats = false; it.start() }
+    }
+
+    /**
+     * Flashes "✓ Copied to clipboard" in the status label for 1.5 s —
+     * used for context-menu copy actions that have no persistent button.
+     */
+    private fun showStatusFeedback() {
+        feedbackTimer?.stop()
+        val origText  = statusLabel.text
+        val origColor = statusLabel.foreground
+        statusLabel.text      = "  ✓ Copied to clipboard"
+        statusLabel.foreground = JBColor(Color(0x2E7D32), Color(0x66BB6A))
+        feedbackTimer = Timer(1500) {
+            statusLabel.text      = origText
+            statusLabel.foreground = origColor
+        }.also { it.isRepeats = false; it.start() }
     }
 
     // ─── Navigation ───────────────────────────────────────────────────────────
